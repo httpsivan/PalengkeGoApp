@@ -1,52 +1,181 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:palengkego/core/config/fee_config.dart';
+import 'package:palengkego/core/services/route_service.dart';
 import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/features/orders/domain/market_order.dart';
 import 'package:palengkego/features/orders/domain/order_status.dart';
 
-class TrackingMapPreview extends StatelessWidget {
+class TrackingMapPreview extends StatefulWidget {
   const TrackingMapPreview({super.key, required this.order});
 
   final MarketOrder order;
 
   @override
+  State<TrackingMapPreview> createState() => _TrackingMapPreviewState();
+}
+
+class _TrackingMapPreviewState extends State<TrackingMapPreview> {
+  final MapController _mapController = MapController();
+  RoadRoute? _roadRoute;
+  bool _isLoadingRoute = false;
+
+  static const _marketLocation = LatLng(
+    FeeConfig.deliveryOriginLat,
+    FeeConfig.deliveryOriginLng,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRoadRoute();
+  }
+
+  @override
+  void didUpdateWidget(covariant TrackingMapPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.order.deliveryLatitude != oldWidget.order.deliveryLatitude ||
+        widget.order.deliveryLongitude != oldWidget.order.deliveryLongitude ||
+        widget.order.fulfillmentMethod != oldWidget.order.fulfillmentMethod) {
+      _fetchRoadRoute();
+    }
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchRoadRoute() async {
+    final order = widget.order;
+    if (order.isPickup) return;
+
+    final lat = order.deliveryLatitude;
+    final lng = order.deliveryLongitude;
+    if (lat == null || lng == null) return;
+
+    final delivery = LatLng(lat, lng);
+
+    setState(() => _isLoadingRoute = true);
+    final route = await RouteService.getRoute(_marketLocation, delivery);
+    if (!mounted) return;
+
+    setState(() {
+      _roadRoute = route;
+      _isLoadingRoute = false;
+    });
+
+    _fitMapBounds();
+  }
+
+  void _fitMapBounds() {
+    final order = widget.order;
+    if (order.isPickup) return;
+
+    final lat = order.deliveryLatitude;
+    final lng = order.deliveryLongitude;
+    if (lat == null || lng == null) return;
+
+    final delivery = LatLng(lat, lng);
+
+    final points = _roadRoute?.points ?? [_marketLocation, delivery];
+    if (points.isEmpty) return;
+
+    final bounds = LatLngBounds.fromPoints(points);
+    try {
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.fromLTRB(40, 70, 40, 70),
+          maxZoom: 16,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final order = widget.order;
     final isPickup = order.isPickup;
     final deliveryLat = order.deliveryLatitude;
     final deliveryLng = order.deliveryLongitude;
     final hasDeliveryCoords = deliveryLat != null && deliveryLng != null;
 
-    const market = LatLng(FeeConfig.deliveryOriginLat, FeeConfig.deliveryOriginLng);
     final delivery = hasDeliveryCoords ? LatLng(deliveryLat, deliveryLng) : null;
+    final showMap = hasDeliveryCoords || isPickup;
 
-    // Compute distance for badge
+    // Road distance or fallback calculation
     String distanceLabel;
     if (isPickup) {
       distanceLabel = '—';
+    } else if (_roadRoute != null) {
+      distanceLabel = '${_roadRoute!.distanceKm.toStringAsFixed(1)} km';
     } else if (order.deliveryDistanceKm != null) {
       distanceLabel = '${order.deliveryDistanceKm!.toStringAsFixed(1)} km';
     } else if (hasDeliveryCoords) {
-      // Use FeeConfig haversine via simple calc (replicate)
       final fee = FeeConfig.computeDeliveryFee(lat: deliveryLat, lng: deliveryLng);
       final km = (fee - FeeConfig.deliveryBaseCharge) / FeeConfig.deliveryPerKm;
       distanceLabel = km > 0 ? '${km.toStringAsFixed(1)} km' : '${fee.toStringAsFixed(0)} km';
-      // Fallback to fee-derived km
       if (km <= 0) distanceLabel = '2.4 km';
     } else {
       distanceLabel = '2.4 km';
     }
 
-    // Non-interactive map: market + delivery line
-    final showMap = hasDeliveryCoords || isPickup;
+    // Dynamic ETA calculation using actual road travel duration
+    final etaValue = (() {
+      if (order.status == OrderStatus.cancelled || order.status == OrderStatus.rejected) {
+        return 'Cancelled';
+      }
+      if (order.status == OrderStatus.completed) return 'Completed';
+
+      final travelMins = _roadRoute?.durationMinutes ?? 12;
+
+      if (isPickup) {
+        if (order.estimatedReadyTime != null) {
+          final diff = order.estimatedReadyTime!.difference(DateTime.now()).inMinutes;
+          return diff > 0 ? '$diff mins' : 'Ready';
+        }
+        return 'Ready';
+      }
+
+      if (order.status == OrderStatus.outForDelivery) {
+        return '~$travelMins mins';
+      }
+
+      if (order.status == OrderStatus.ready) {
+        return '~$travelMins mins';
+      }
+
+      if (order.estimatedReadyTime != null) {
+        final prepMins = order.estimatedReadyTime!.difference(DateTime.now()).inMinutes;
+        final total = math.max(0, prepMins) + travelMins;
+        return '~$total mins';
+      }
+
+      return '~${travelMins + 15} mins';
+    })();
+
+    // Route points to draw
+    final routePoints = _roadRoute?.points ??
+        (delivery != null ? [_marketLocation, delivery] : <LatLng>[]);
 
     return Container(
-      height: 280,
+      height: 290,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFE8F5E9),
         borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -54,15 +183,19 @@ class TrackingMapPreview extends StatelessWidget {
           children: [
             if (showMap)
               FlutterMap(
+                mapController: _mapController,
                 options: MapOptions(
                   initialCenter: hasDeliveryCoords
                       ? LatLng(
-                          (market.latitude + delivery!.latitude) / 2,
-                          (market.longitude + delivery.longitude) / 2,
+                          (_marketLocation.latitude + delivery!.latitude) / 2,
+                          (_marketLocation.longitude + delivery.longitude) / 2,
                         )
-                      : market,
+                      : _marketLocation,
                   initialZoom: hasDeliveryCoords ? 13 : 15,
-                  interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+                  onMapReady: _fitMapBounds,
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                  ),
                 ),
                 children: [
                   TileLayer(
@@ -89,30 +222,68 @@ class TrackingMapPreview extends StatelessWidget {
                       ),
                     ],
                   ),
-                  PolylineLayer(
-                    polylines: [
-                      if (!isPickup && delivery != null)
+                  if (!isPickup && routePoints.isNotEmpty) ...[
+                    // Polyline casing / shadow
+                    PolylineLayer(
+                      polylines: [
                         Polyline(
-                          points: [market, delivery],
-                          strokeWidth: 4,
+                          points: routePoints,
+                          strokeWidth: 7,
+                          color: AppTheme.primaryGreen.withValues(alpha: 0.25),
+                        ),
+                        // Main road route polyline
+                        Polyline(
+                          points: routePoints,
+                          strokeWidth: 4.5,
                           color: AppTheme.primaryGreen,
                         ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                   MarkerLayer(
                     markers: [
-                      const Marker(
-                        point: market,
-                        width: 40,
-                        height: 40,
-                        child: Icon(Icons.store_rounded, color: AppTheme.primaryGreen, size: 28),
+                      // Market location pin
+                      Marker(
+                        point: _marketLocation,
+                        width: 44,
+                        height: 44,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.primaryGreen, width: 2),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black26, blurRadius: 4),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.store_rounded,
+                            color: AppTheme.primaryGreen,
+                            size: 22,
+                          ),
+                        ),
                       ),
+                      // Delivery destination pin
                       if (!isPickup && delivery != null)
                         Marker(
                           point: delivery,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(Icons.location_on, color: Color(0xFFD97706), size: 32),
+                          width: 44,
+                          height: 44,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: const Color(0xFFD97706), width: 2),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 4),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Color(0xFFD97706),
+                              size: 24,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -132,57 +303,116 @@ class TrackingMapPreview extends StatelessWidget {
                   child: const SizedBox.expand(),
                 ),
               ),
+
+            // Top Left Badge: Estimated Arrival
             Positioned(
               top: 12,
               left: 12,
               child: _MapBadge(
                 label: isPickup ? 'ESTIMATED READY TIME' : 'ESTIMATED ARRIVAL',
-                value: (() {
-                  if (order.status == OrderStatus.cancelled || order.status == OrderStatus.rejected) {
-                    return 'Cancelled';
-                  }
-                  if (order.status == OrderStatus.completed) return 'Completed';
-                  if (order.estimatedReadyTime != null) {
-                    final diff = order.estimatedReadyTime!.difference(DateTime.now()).inMinutes;
-                    return diff > 0 ? '$diff mins' : 'Ready';
-                  }
-                  return 'TBD';
-                })(),
+                value: etaValue,
+                trailing: _isLoadingRoute
+                    ? const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primaryGreen,
+                          ),
+                        ),
+                      )
+                    : null,
               ),
             ),
+
+            // Top Right Badge: Distance
             if (!isPickup)
               Positioned(
                 top: 12,
                 right: 12,
-                child: _MapBadge(label: 'DISTANCE', value: distanceLabel),
+                child: _MapBadge(label: 'ROAD DISTANCE', value: distanceLabel),
               ),
-            if (!showMap)
-              const Center(
-                child: Icon(Icons.location_on, size: 48, color: AppTheme.primaryGreen),
+
+            // Re-center / Fit bounds button
+            if (showMap && !isPickup)
+              Positioned(
+                bottom: 54,
+                right: 12,
+                child: Material(
+                  elevation: 3,
+                  shape: const CircleBorder(),
+                  color: Colors.white,
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: _fitMapBounds,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.crop_free_rounded,
+                        size: 20,
+                        color: AppTheme.primaryGreen,
+                      ),
+                    ),
+                  ),
+                ),
               ),
+
             if (isPickup)
               Positioned(
                 top: 100,
                 right: 80,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(color: AppTheme.primaryGreen, borderRadius: BorderRadius.circular(8)),
-                  child: const Text('STALL 12', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryGreen,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'STALL 12',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
+
+            // Bottom Route Summary Bar
             Positioned(
               bottom: 12,
               left: 12,
               right: 12,
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(12)),
-                child: Text(
-                  hasDeliveryCoords ? 'Market (Abella) → Delivery • ${order.deliveryAddress ?? ''}' : 'Market: Naga City People\'s Mall, Abella',
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.primaryGreen),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.95),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x14000000), blurRadius: 4),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.route_rounded, size: 16, color: AppTheme.primaryGreen),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        hasDeliveryCoords
+                            ? 'Market → Delivery • ${order.deliveryAddress ?? ''}'
+                            : 'Market: Naga City People\'s Mall, Abella',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryGreen,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -194,10 +424,15 @@ class TrackingMapPreview extends StatelessWidget {
 }
 
 class _MapBadge extends StatelessWidget {
-  const _MapBadge({required this.label, required this.value});
+  const _MapBadge({
+    required this.label,
+    required this.value,
+    this.trailing,
+  });
 
   final String label;
   final String value;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -206,11 +441,11 @@ class _MapBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: Color(0x1A000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -226,13 +461,19 @@ class _MapBadge extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.primaryGreen,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.primaryGreen,
+                ),
+              ),
+              ?trailing,
+            ],
           ),
         ],
       ),
