@@ -132,13 +132,11 @@ Future<void> main() async {
     return;
   }
 
-  // Pre-load the order store so the mock order book survives restarts, then
-  // inject it through Riverpod instead of a global static.
+  // Keep the app's first frame independent of potentially large local mock
+  // caches. The repositories load these stores lazily when their screens are
+  // first used, rather than making the splash wait on secure-storage reads.
   final orderStore = SharedOrderStore();
-  await orderStore.load();
-
   final messagingStore = SharedMessagingStore();
-  await messagingStore.load();
 
   final container = ProviderContainer(
     overrides: [

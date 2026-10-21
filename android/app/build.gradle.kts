@@ -3,13 +3,20 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
-    id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// `google-services.json` contains environment-specific Firebase configuration
+// and is intentionally not committed. Firebase initializes from the checked-in
+// Dart options, so local development builds must also work without this plugin.
+// When the file is supplied (for example, a release build), apply the plugin
+// normally to generate the Android Firebase resources.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.palengkego.app"
     compileSdk = flutter.compileSdkVersion
