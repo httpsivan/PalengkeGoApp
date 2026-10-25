@@ -5,7 +5,6 @@ import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/core/utils/image_picker_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:palengkego/features/auth/application/auth_provider.dart';
 import 'package:palengkego/features/vendors/application/kyc_provider.dart';
 import 'package:palengkego/features/vendors/domain/kyc_submission.dart';
@@ -190,13 +189,6 @@ class _VendorOnboardingScreenState
                 .trim(),
       );
       final processor = ref.read(kycProcessorProvider.notifier);
-      // Track application submission so the approval dialog shows automatically once approved.
-      final user = ref.read(authProvider);
-      if (user != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('kyc_has_applied_${user.uid}', true);
-        await prefs.setBool('kyc_approved_dialog_${user.uid}', false);
-      }
       // 1. Immediately dismiss to home screen
       Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
 
