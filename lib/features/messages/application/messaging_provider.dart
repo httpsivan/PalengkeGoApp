@@ -81,136 +81,158 @@ final messagingRepositoryProvider = Provider<MessagingRepository>((ref) {
 });
 
 /// Stream of conversations for the currently logged in vendor stall.
+/// Merges remote Supabase realtime updates with the local store so vendor conversations
+/// are always immediately visible and resilient across online/offline modes.
 final vendorConversationsProvider =
-    StreamProvider.autoDispose<List<ChatConversation>>((ref) async* {
+    StreamProvider.autoDispose<List<ChatConversation>>((ref) {
       final repo = ref.watch(messagingRepositoryProvider);
       final store = ref.watch(sharedMessagingStoreProvider);
       final stall = ref.watch(vendorStallProvider);
       final currentVendorId = ref.watch(currentVendorIdProvider);
       final stallId = currentVendorId ?? stall.stallId;
 
-      List<ChatConversation> mergeLocalAdmin(List<ChatConversation> list) {
-        final localAdmin = store.conversations.where(
-          (c) =>
-              c.inquiryType == 'admin_support' ||
-              c.customerUid == 'admin_support' ||
-              c.stallId == 'admin_support',
-        );
-        final result = List<ChatConversation>.from(list);
-        for (final adminConv in localAdmin) {
-          if (!result.any((c) => c.id == adminConv.id)) {
-            result.insert(0, adminConv);
-          }
-        }
-        return result;
-      }
+      final controller = StreamController<List<ChatConversation>>();
+      List<ChatConversation> repoList = [];
 
-      await store.load();
-      var initial = <ChatConversation>[];
-      try {
-        initial = await repo.getConversationsForVendor(stallId);
-      } catch (_) {}
-
-      if (initial.isEmpty) {
+      List<ChatConversation> buildMerged() {
         final normalizedStallId =
             (stallId == 'stall holder-001' || stallId == 'vendor-001')
                 ? 'v1'
                 : stallId;
-        final local = store.conversations
-            .where((c) =>
-                c.stallId == stallId ||
-                c.stallId == normalizedStallId ||
-                (normalizedStallId.isEmpty &&
-                    (c.stallId == 'v1' || c.stallId == 'vendor-001')) ||
-                c.customerUid == 'admin_support')
-            .toList();
-        if (local.isNotEmpty) {
-          initial = local;
+        final localConvs = store.conversations.where(
+          (c) =>
+              c.stallId == stallId ||
+              c.stallId == normalizedStallId ||
+              (normalizedStallId.isEmpty &&
+                  (c.stallId == 'v1' || c.stallId == 'vendor-001')) ||
+              c.customerUid == 'admin_support' ||
+              c.stallId == 'admin_support' ||
+              c.inquiryType == 'admin_support',
+        );
+        final result = List<ChatConversation>.from(repoList);
+        for (final localConv in localConvs) {
+          final existingIdx = result.indexWhere((c) => c.id == localConv.id);
+          if (existingIdx == -1) {
+            result.add(localConv);
+          } else {
+            if (localConv.lastMessageTimestamp.isAfter(result[existingIdx].lastMessageTimestamp)) {
+              result[existingIdx] = localConv;
+            }
+          }
         }
+        result.sort((a, b) => b.lastMessageTimestamp.compareTo(a.lastMessageTimestamp));
+        return result;
       }
-      yield mergeLocalAdmin(initial);
 
-      try {
-        await for (final convs in repo.watchConversationsForVendor(stallId)) {
-          yield mergeLocalAdmin(convs);
-        }
-      } catch (_) {
-        await for (final convs in store.watchConversations()) {
-          final normalizedStallId =
-              (stallId == 'stall holder-001' || stallId == 'vendor-001')
-                  ? 'v1'
-                  : stallId;
-          final local = convs
-              .where((c) =>
-                  c.stallId == stallId ||
-                  c.stallId == normalizedStallId ||
-                  c.inquiryType == 'admin_support' ||
-                  c.customerUid == 'admin_support')
-              .toList();
-          yield local;
+      void emit() {
+        if (!controller.isClosed) {
+          controller.add(buildMerged());
         }
       }
+
+      store.load().then((_) {
+        emit();
+      });
+
+      repo.getConversationsForVendor(stallId).then((list) {
+        repoList = list;
+        emit();
+      }).catchError((_) {});
+
+      final repoSub = repo.watchConversationsForVendor(stallId).listen(
+        (list) {
+          repoList = list;
+          emit();
+        },
+        onError: (_) {},
+      );
+
+      final storeSub = store.watchConversations().listen(
+        (_) => emit(),
+        onError: (_) {},
+      );
+
+      ref.onDispose(() {
+        repoSub.cancel();
+        storeSub.cancel();
+        controller.close();
+      });
+
+      return controller.stream;
     });
 
 /// Stream of conversations for the customer.
+/// Merges remote Supabase realtime updates with local store conversations so chat
+/// history remains continuously accessible.
 final customerConversationsProvider =
-    StreamProvider.autoDispose<List<ChatConversation>>((ref) async* {
+    StreamProvider.autoDispose<List<ChatConversation>>((ref) {
       final repo = ref.watch(messagingRepositoryProvider);
       final store = ref.watch(sharedMessagingStoreProvider);
       final user = ref.watch(authProvider);
       final customerUid = user?.uid ?? 'customer-001';
 
-      List<ChatConversation> mergeLocalAdmin(List<ChatConversation> list) {
-        final localAdmin = store.conversations.where(
+      final controller = StreamController<List<ChatConversation>>();
+      List<ChatConversation> repoList = [];
+
+      List<ChatConversation> buildMerged() {
+        final localConvs = store.conversations.where(
           (c) =>
+              c.customerUid == customerUid ||
+              c.customerUid == 'customer-001' ||
               c.inquiryType == 'admin_support' ||
-              c.customerUid == 'admin_support' ||
-              c.stallId == 'admin_support',
+              c.stallId == 'admin_support' ||
+              c.customerUid == 'admin_support',
         );
-        final result = List<ChatConversation>.from(list);
-        for (final adminConv in localAdmin) {
-          if (!result.any((c) => c.id == adminConv.id)) {
-            result.insert(0, adminConv);
+        final result = List<ChatConversation>.from(repoList);
+        for (final localConv in localConvs) {
+          final existingIdx = result.indexWhere((c) => c.id == localConv.id);
+          if (existingIdx == -1) {
+            result.add(localConv);
+          } else {
+            if (localConv.lastMessageTimestamp.isAfter(result[existingIdx].lastMessageTimestamp)) {
+              result[existingIdx] = localConv;
+            }
           }
         }
+        result.sort((a, b) => b.lastMessageTimestamp.compareTo(a.lastMessageTimestamp));
         return result;
       }
 
-      await store.load();
-      var initial = <ChatConversation>[];
-      try {
-        initial = await repo.getConversationsForCustomer(customerUid);
-      } catch (_) {}
-
-      if (initial.isEmpty) {
-        final local = store.conversations
-            .where((c) =>
-                c.customerUid == customerUid ||
-                c.customerUid == 'customer-001' ||
-                c.stallId == 'admin_support')
-            .toList();
-        if (local.isNotEmpty) {
-          initial = local;
+      void emit() {
+        if (!controller.isClosed) {
+          controller.add(buildMerged());
         }
       }
-      yield mergeLocalAdmin(initial);
 
-      try {
-        await for (final convs in repo.watchConversationsForCustomer(customerUid)) {
-          yield mergeLocalAdmin(convs);
-        }
-      } catch (_) {
-        await for (final convs in store.watchConversations()) {
-          final local = convs
-              .where((c) =>
-                  c.customerUid == customerUid ||
-                  c.customerUid == 'customer-001' ||
-                  c.inquiryType == 'admin_support' ||
-                  c.stallId == 'admin_support')
-              .toList();
-          yield local;
-        }
-      }
+      store.load().then((_) {
+        emit();
+      });
+
+      repo.getConversationsForCustomer(customerUid).then((list) {
+        repoList = list;
+        emit();
+      }).catchError((_) {});
+
+      final repoSub = repo.watchConversationsForCustomer(customerUid).listen(
+        (list) {
+          repoList = list;
+          emit();
+        },
+        onError: (_) {},
+      );
+
+      final storeSub = store.watchConversations().listen(
+        (_) => emit(),
+        onError: (_) {},
+      );
+
+      ref.onDispose(() {
+        repoSub.cancel();
+        storeSub.cancel();
+        controller.close();
+      });
+
+      return controller.stream;
     });
 
 /// Stream of messages for a single conversation with instant live sync and deduplication.
@@ -377,7 +399,7 @@ class MessagingActions {
     }
 
     try {
-      return await _repo.getOrCreateConversation(
+      final conv = await _repo.getOrCreateConversation(
         customerUid: customerUid,
         customerName: customerName,
         stallId: stallId,
@@ -387,6 +409,8 @@ class MessagingActions {
         inquiryType: inquiryType,
         relatedOrderId: relatedOrderId,
       );
+      await _store.registerConversation(conv);
+      return conv;
     } catch (_) {
       return _store.getOrCreateConversation(
         customerUid: customerUid,

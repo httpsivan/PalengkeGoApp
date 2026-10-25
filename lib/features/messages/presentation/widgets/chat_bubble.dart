@@ -119,7 +119,8 @@ class ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localTime = message.timestamp.toLocal();
-    final timeStr = DateFormat('MMM d • h:mm a').format(localTime);
+    // Display only time on chat bubble; section date headers handle calendar dates.
+    final timeStr = DateFormat('h:mm a').format(localTime);
 
     return Align(
       alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,

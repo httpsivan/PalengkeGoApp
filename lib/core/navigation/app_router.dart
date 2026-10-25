@@ -179,9 +179,11 @@ class AppRouter {
           ),
         );
       case AppRoutes.messages:
+        // When accessed without explicit args (e.g. web route /#/messages),
+        // pass null so MessagesInboxScreen dynamically detects the user's role (vendor vs customer).
         final isVendorView = settings.arguments is bool
             ? settings.arguments as bool
-            : false;
+            : null;
         return _materialRoute(
           settings,
           MessagesInboxScreen(

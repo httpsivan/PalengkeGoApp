@@ -913,13 +913,26 @@ class SharedMessagingStore {
     }
   }
 
+  /// Registers or updates a conversation in the local store so it is immediately visible in the chat list.
+  Future<void> registerConversation(ChatConversation conversation) async {
+    await load();
+    final index = _conversations.indexWhere((c) => c.id == conversation.id);
+    if (index == -1) {
+      _conversations.insert(0, conversation);
+    } else {
+      _conversations[index] = conversation;
+    }
+    _notifyConversations();
+    await save();
+  }
+
   void _updateConversationSummary(ChatMessage message) {
     final convIndex = _conversations.indexWhere((c) => c.id == message.conversationId);
+    final previewText = message.text.isNotEmpty
+        ? message.text
+        : (message.attachmentUrl != null ? '📷 Photo' : '');
     if (convIndex != -1) {
       final existing = _conversations[convIndex];
-      final previewText = message.text.isNotEmpty
-          ? message.text
-          : (message.attachmentUrl != null ? '📷 Photo' : '');
       final updated = existing.copyWith(
         lastMessageText: previewText,
         lastMessageTimestamp: message.timestamp,
@@ -927,6 +940,26 @@ class SharedMessagingStore {
         updatedAt: message.timestamp,
       );
       _conversations[convIndex] = updated;
+    } else {
+      // If conversation is not yet indexed, create an initial entry so it appears in the chat list.
+      final isFromCustomer = message.senderRole == 'customer';
+      _conversations.insert(
+        0,
+        ChatConversation(
+          id: message.conversationId,
+          stallId: isFromCustomer ? 'v1' : message.senderId,
+          stallName: isFromCustomer ? 'PalengkeGo Stall Holder' : message.senderName,
+          customerUid: isFromCustomer ? message.senderId : 'customer-001',
+          customerName: isFromCustomer ? message.senderName : 'Customer',
+          lastMessageText: previewText,
+          lastMessageTimestamp: message.timestamp,
+          lastMessageSenderId: message.senderId,
+          vendorUnreadCount: isFromCustomer ? 1 : 0,
+          customerUnreadCount: isFromCustomer ? 0 : 1,
+          createdAt: message.timestamp,
+          updatedAt: message.timestamp,
+        ),
+      );
     }
   }
 

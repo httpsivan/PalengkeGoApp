@@ -92,10 +92,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   Future<void> _checkKycApprovalStatus() async {
     final user = ref.read(authProvider);
-    if (user == null) return;
-    if (user.isVendor) {
-      await ref.read(hasVendorStallProvider.notifier).setHasVendorStall(true);
-    }
+    // Existing vendors or stall holders are already approved; never show approval popup.
+    if (user == null || user.isVendor) return;
+    final hasStall = ref.read(hasVendorStallProvider);
+    if (hasStall) return;
     try {
       final client = ref.read(supabaseClientProvider);
       if (client != null) {
@@ -198,6 +198,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     ref.listen<bool>(showKycSuccessDialogProvider, (previous, next) {
       if (next) {
         ref.read(showKycSuccessDialogProvider.notifier).dismiss();
+        final user = ref.read(authProvider);
+        // Suppress dialog if the user is already an approved stall holder
+        if (user != null && user.isVendor) {
+          return;
+        }
         showDialog(
           context: context,
           barrierDismissible: false,

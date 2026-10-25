@@ -317,6 +317,33 @@ void main() {
       expect(find.text('Eto po ba yung available?'), findsOneWidget);
       expect(find.byIcon(Icons.zoom_in_rounded), findsOneWidget);
     });
+
+    testWidgets('ChatBubble displays time without date', (tester) async {
+      final msg = ChatMessage(
+        id: 'msg_time_test',
+        conversationId: 'conv_ana_santos',
+        senderId: 'cust_ana_santos',
+        senderName: 'Ana Santos',
+        senderRole: 'customer',
+        text: 'Kumusta',
+        timestamp: DateTime(2026, 10, 25, 15, 43),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatBubble(
+              message: msg,
+              isOutgoing: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('3:43 PM'), findsOneWidget);
+      expect(find.textContaining('Oct 25'), findsNothing);
+    });
   });
 
   group('VendorAccountScreen (Profile)', () {
