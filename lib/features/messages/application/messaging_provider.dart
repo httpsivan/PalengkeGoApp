@@ -99,28 +99,17 @@ final vendorConversationsProvider =
             (stallId == 'stall holder-001' || stallId == 'vendor-001')
                 ? 'v1'
                 : stallId;
-        // Never include admin support conversations in the vendor inbox history.
-        // Direct admin support is accessed separately via the dedicated header action.
         final localConvs = store.conversations.where(
-          (c) {
-            final isAdmin = c.inquiryType == 'admin_support' ||
-                c.customerUid == 'admin_support' ||
-                c.stallId == 'admin_support' ||
-                c.id.contains('admin_support');
-            if (isAdmin) return false;
-            return c.stallId == stallId ||
-                c.stallId == normalizedStallId ||
-                (normalizedStallId.isEmpty &&
-                    (c.stallId == 'v1' || c.stallId == 'vendor-001'));
-          },
-        );
-        final result = repoList.where((c) {
-          final isAdmin = c.inquiryType == 'admin_support' ||
+          (c) =>
+              c.stallId == stallId ||
+              c.stallId == normalizedStallId ||
+              (normalizedStallId.isEmpty &&
+                  (c.stallId == 'v1' || c.stallId == 'vendor-001')) ||
               c.customerUid == 'admin_support' ||
               c.stallId == 'admin_support' ||
-              c.id.contains('admin_support');
-          return !isAdmin;
-        }).toList();
+              c.inquiryType == 'admin_support',
+        );
+        final result = List<ChatConversation>.from(repoList);
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -186,26 +175,15 @@ final customerConversationsProvider =
       List<ChatConversation> repoList = [];
 
       List<ChatConversation> buildMerged() {
-        // Never include admin support conversations in customer inbox history.
-        // Direct admin support is accessed separately via the dedicated header action.
         final localConvs = store.conversations.where(
-          (c) {
-            final isAdmin = c.inquiryType == 'admin_support' ||
-                c.customerUid == 'admin_support' ||
-                c.stallId == 'admin_support' ||
-                c.id.contains('admin_support');
-            if (isAdmin) return false;
-            return c.customerUid == customerUid ||
-                c.customerUid == 'customer-001';
-          },
-        );
-        final result = repoList.where((c) {
-          final isAdmin = c.inquiryType == 'admin_support' ||
-              c.customerUid == 'admin_support' ||
+          (c) =>
+              c.customerUid == customerUid ||
+              c.customerUid == 'customer-001' ||
+              c.inquiryType == 'admin_support' ||
               c.stallId == 'admin_support' ||
-              c.id.contains('admin_support');
-          return !isAdmin;
-        }).toList();
+              c.customerUid == 'admin_support',
+        );
+        final result = List<ChatConversation>.from(repoList);
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -256,41 +234,6 @@ final customerConversationsProvider =
 
       return controller.stream;
     });
-
-/// Stream indicating whether there is an unread message in the admin support conversation
-/// for the current vendor or customer, powering the unread badge on the "Message Admin Directly" button.
-final adminHasUnreadProvider =
-    StreamProvider.autoDispose.family<bool, bool>((ref, isVendor) {
-      final store = ref.watch(sharedMessagingStoreProvider);
-      final controller = StreamController<bool>();
-
-      bool checkUnread() {
-        return store.conversations.any((c) {
-          final isAdmin = c.inquiryType == 'admin_support' ||
-              c.customerUid == 'admin_support' ||
-              c.stallId == 'admin_support' ||
-              c.id.contains('admin_support');
-          if (!isAdmin) return false;
-          return isVendor ? c.vendorUnreadCount > 0 : c.customerUnreadCount > 0;
-        });
-      }
-
-      controller.add(checkUnread());
-
-      final sub = store.watchConversations().listen((_) {
-        if (!controller.isClosed) {
-          controller.add(checkUnread());
-        }
-      });
-
-      ref.onDispose(() {
-        sub.cancel();
-        controller.close();
-      });
-
-      return controller.stream;
-    });
-
 
 /// Stream of messages for a single conversation with instant live sync and deduplication.
 final conversationMessagesProvider = StreamProvider.autoDispose
