@@ -92,10 +92,17 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   Future<void> _checkKycApprovalStatus() async {
     final user = ref.read(authProvider);
-    // Existing vendors or stall holders are already approved; never show approval popup.
-    if (user == null || user.isVendor) return;
-    final hasStall = ref.read(hasVendorStallProvider);
-    if (hasStall) return;
+    if (user == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyShown =
+        prefs.getBool('kyc_approved_dialog_${user.uid}') ?? false;
+    // Show just once: if already shown or acknowledged, do not show again
+    if (alreadyShown) return;
+
+    final hasAppliedLocally =
+        prefs.getBool('kyc_has_applied_${user.uid}') ?? false;
+
     try {
       final client = ref.read(supabaseClientProvider);
       if (client != null) {
@@ -113,11 +120,27 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               .setHasVendorStall(true);
           await ref.read(authProvider.notifier).reloadUser();
 
-          final prefs = await SharedPreferences.getInstance();
-          final alreadyShown =
-              prefs.getBool('kyc_approved_dialog_${user.uid}') ?? false;
-          if (!alreadyShown && mounted) {
+          // Check if there is an approved KYC submission record for this user in database
+          bool hasKycSubmission = false;
+          try {
+            final kycSub = await client
+                .from('kyc_submissions')
+                .select('status')
+                .eq('stall_holder_id', user.uid)
+                .eq('status', 'approved')
+                .limit(1)
+                .maybeSingle();
+            hasKycSubmission = kycSub != null;
+          } catch (_) {}
+
+          // Show automatically once if this user had an application that was approved
+          final shouldShowApproval = hasAppliedLocally || hasKycSubmission;
+
+          if (shouldShowApproval && mounted) {
+            // Mark as shown immediately so it displays only once
             await prefs.setBool('kyc_approved_dialog_${user.uid}', true);
+            await prefs.setBool('kyc_has_applied_${user.uid}', false);
+
             ref.read(notificationServiceProvider).addNotification(
                   AppNotification(
                     id: 'kyc_approved_${DateTime.now().millisecondsSinceEpoch}',
@@ -136,6 +159,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                       'Congratulations! Your stall holder application has been accepted by MEPO.',
                 );
             ref.read(showKycSuccessDialogProvider.notifier).show();
+          } else {
+            // Pre-existing stall holder with no pending application: mark as shown so popup never triggers
+            await prefs.setBool('kyc_approved_dialog_${user.uid}', true);
           }
         }
       }
@@ -199,77 +225,93 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       if (next) {
         ref.read(showKycSuccessDialogProvider.notifier).dismiss();
         final user = ref.read(authProvider);
-        // Suppress dialog if the user is already an approved stall holder
-        if (user != null && user.isVendor) {
-          return;
-        }
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogCtx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
-                SizedBox(width: 10),
-                Text(
-                  'Application Approved!',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+        if (user == null) return;
+
+        SharedPreferences.getInstance().then((prefs) {
+          final alreadyShown =
+              prefs.getBool('kyc_approved_dialog_${user.uid}') ?? false;
+          // Show automatically just once when application is approved
+          if (alreadyShown) return;
+
+          // Mark as shown immediately
+          prefs.setBool('kyc_approved_dialog_${user.uid}', true);
+          prefs.setBool('kyc_has_applied_${user.uid}', false);
+
+          if (!context.mounted) return;
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (dialogCtx) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+                  SizedBox(width: 10),
+                  Text(
+                    'Application Approved!',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'Congratulations! Your application has been approved by MEPO. Your stall is now active and ready for business.',
+                style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    prefs.setBool('kyc_approved_dialog_${user.uid}', true);
+                    Navigator.of(dialogCtx).pop();
+                  },
+                  child: const Text(
+                    'Dismiss',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await prefs.setBool('kyc_approved_dialog_${user.uid}', true);
+                    if (dialogCtx.mounted) {
+                      Navigator.of(dialogCtx).pop();
+                    }
+                    final entered = await ref
+                        .read(authProvider.notifier)
+                        .enterVendorMode();
+                    if (!entered) {
+                      if (context.mounted) {
+                        AppServices.showError(
+                          'Only stall holders can manage a stall.',
+                        );
+                      }
+                      return;
+                    }
+                    if (context.mounted) {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        PageTransitions.slideFromRight(
+                          const VendorDashboardScreen(),
+                        ),
+                        (route) => false,
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Manage Stall',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
-            content: const Text(
-              'Congratulations! Your application has been approved by MEPO. Your stall is now active and ready for business.',
-              style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: const Text(
-                  'Dismiss',
-                  style: TextStyle(color: AppTheme.textSecondary),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.of(dialogCtx).pop(); // Dismiss dialog
-                  final entered = await ref
-                      .read(authProvider.notifier)
-                      .enterVendorMode();
-                  if (!entered) {
-                    if (context.mounted) {
-                      AppServices.showError(
-                        'Only stall holders can manage a stall.',
-                      );
-                    }
-                    return;
-                  }
-                  if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      PageTransitions.slideFromRight(
-                        const VendorDashboardScreen(),
-                      ),
-                      (route) => false,
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Manage Stall',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        );
+          );
+        });
       }
     });
 
