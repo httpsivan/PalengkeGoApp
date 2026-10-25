@@ -23,6 +23,27 @@ class AdaptiveImage extends StatelessWidget {
     this.height,
   });
 
+  /// In-memory cache for decoded base64 image bytes to preserve
+  /// reference identity across widget rebuilds and eliminate blinking/flickering.
+  static final Map<String, Uint8List> _base64Cache = {};
+
+  static Uint8List? getOrDecodeBase64(String path) {
+    final cached = _base64Cache[path];
+    if (cached != null) return cached;
+    try {
+      final commaIndex = path.indexOf(',');
+      final b64String = commaIndex != -1 ? path.substring(commaIndex + 1) : path;
+      final bytes = base64Decode(b64String.replaceAll(RegExp(r'\s+'), ''));
+      if (_base64Cache.length >= 60) {
+        _base64Cache.remove(_base64Cache.keys.first);
+      }
+      _base64Cache[path] = bytes;
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final resolvedPath = resolveImageUrl(path);
@@ -40,19 +61,18 @@ class AdaptiveImage extends StatelessWidget {
     }
 
     if (resolvedPath.startsWith('data:image/')) {
-      try {
-        final commaIndex = resolvedPath.indexOf(',');
-        if (commaIndex != -1) {
-          final bytes = base64Decode(resolvedPath.substring(commaIndex + 1));
-          return Image.memory(
-            bytes,
-            fit: fit,
-            width: width,
-            height: height,
-            errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
-          );
-        }
-      } catch (_) {}
+      final bytes = getOrDecodeBase64(resolvedPath);
+      if (bytes != null) {
+        return Image.memory(
+          bytes,
+          fit: fit,
+          width: width,
+          height: height,
+          gaplessPlayback: true,
+          errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
+        );
+      }
+      return _buildPlaceholder();
     }
 
     if (resolvedPath.startsWith('assets/')) {
@@ -61,6 +81,7 @@ class AdaptiveImage extends StatelessWidget {
         fit: fit,
         width: width,
         height: height,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
       );
     }
@@ -72,6 +93,7 @@ class AdaptiveImage extends StatelessWidget {
           fit: fit,
           width: width,
           height: height,
+          gaplessPlayback: true,
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) return child;
             return _buildPlaceholder(isLoading: true);
@@ -182,6 +204,7 @@ class AdaptiveImage extends StatelessWidget {
         fit: fit,
         width: width,
         height: height,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
       );
     } else {
@@ -213,6 +236,7 @@ class AdaptiveImage extends StatelessWidget {
         fit: fit,
         width: width,
         height: height,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) {
           if (fallbackPath != null && fallbackPath!.isNotEmpty && fallbackPath != resolvedPath) {
             return AdaptiveImage(
@@ -252,13 +276,11 @@ ImageProvider? adaptiveImageProvider(String? path) {
     return null;
   }
   if (resolvedPath.startsWith('data:image/')) {
-    try {
-      final commaIndex = resolvedPath.indexOf(',');
-      if (commaIndex != -1) {
-        final bytes = base64Decode(resolvedPath.substring(commaIndex + 1));
-        return MemoryImage(bytes);
-      }
-    } catch (_) {}
+    final bytes = AdaptiveImage.getOrDecodeBase64(resolvedPath);
+    if (bytes != null) {
+      return MemoryImage(bytes);
+    }
+    return null;
   }
   if (resolvedPath.startsWith('assets/')) {
     return AssetImage(resolvedPath);
@@ -283,4 +305,3 @@ ImageProvider? adaptiveImageProvider(String? path) {
     return null;
   }
 }
-

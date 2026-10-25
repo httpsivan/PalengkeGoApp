@@ -5,14 +5,12 @@ import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/core/utils/page_transitions.dart';
 import 'package:palengkego/features/auth/application/auth_provider.dart';
 import 'package:palengkego/features/messages/application/messaging_provider.dart';
+import 'package:palengkego/features/messages/data/shared_messaging_store.dart';
 import 'package:palengkego/features/messages/domain/chat_conversation.dart';
 import 'package:palengkego/features/messages/presentation/pages/chat_screen.dart';
 import 'package:palengkego/features/messages/presentation/widgets/conversation_card.dart';
 import 'package:palengkego/features/messages/presentation/widgets/messages_filter_chips.dart';
-import 'package:palengkego/features/notifications/application/notification_provider.dart';
-import 'package:palengkego/features/notifications/presentation/pages/notifications_screen.dart';
 import 'package:palengkego/features/vendors/application/vendor_stall_provider.dart';
-import 'package:palengkego/features/vendors/presentation/pages/vendor_notifications_screen.dart';
 
 class MessagesInboxScreen extends ConsumerStatefulWidget {
   final bool isEmbeddedInTab;
@@ -27,6 +25,7 @@ class MessagesInboxScreen extends ConsumerStatefulWidget {
   @override
   ConsumerState<MessagesInboxScreen> createState() => _MessagesInboxScreenState();
 }
+
 class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
   MessageFilter _selectedFilter = MessageFilter.all;
   String _searchQuery = '';
@@ -42,6 +41,89 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openAdminChat(
+    BuildContext context,
+    bool isVendor,
+  ) async {
+    try {
+      final user = ref.read(authProvider);
+      final stall = ref.read(vendorStallProvider);
+      final currentVendorId = ref.read(currentVendorIdProvider);
+      final stallId = currentVendorId ??
+          (stall.stallId.isNotEmpty ? stall.stallId : 'v1');
+      final stallName =
+          stall.name.isNotEmpty ? stall.name : 'PalengkeGo Stall Holder';
+      final stallAvatar =
+          (stall.avatarImage != null && stall.avatarImage!.isNotEmpty)
+              ? stall.avatarImage
+              : stall.thumbnailImage;
+
+      const adminId = 'admin_support';
+      const adminName = 'PalengkeGo Admin';
+
+      final messagingActions = ref.read(messagingActionsProvider);
+
+      ChatConversation conv;
+      try {
+        if (isVendor) {
+          conv = await messagingActions.getOrCreateConversation(
+            customerUid: adminId,
+            customerName: adminName,
+            stallId: stallId,
+            stallName: stallName,
+            stallAvatar: stallAvatar,
+            inquiryType: 'admin_support',
+          );
+        } else {
+          conv = await messagingActions.getOrCreateConversation(
+            customerUid: user?.uid ?? 'customer-001',
+            customerName: user?.displayName ?? 'Customer',
+            customerAvatar: user?.profilePhoto,
+            stallId: adminId,
+            stallName: adminName,
+            inquiryType: 'admin_support',
+          );
+        }
+      } catch (_) {
+        // Fallback directly to shared messaging store if remote backend RLS restricts admin conversation creation
+        final localStore = ref.read(sharedMessagingStoreProvider);
+        conv = await localStore.getOrCreateConversation(
+          customerUid: isVendor ? adminId : (user?.uid ?? 'customer-001'),
+          customerName: isVendor ? adminName : (user?.displayName ?? 'Customer'),
+          stallId: isVendor ? stallId : adminId,
+          stallName: isVendor ? stallName : adminName,
+          stallAvatar: isVendor ? stallAvatar : null,
+          customerAvatar: isVendor ? null : user?.profilePhoto,
+          inquiryType: 'admin_support',
+        );
+      }
+
+      if (!context.mounted) return;
+      Navigator.of(context).push(
+        PageTransitions.slideFromRight(
+          ChatScreen(
+            conversationId: conv.id,
+            displayName: adminName,
+            isVendorView: isVendor,
+            stallId: isVendor ? stallId : adminId,
+            avatarUrl: conv.stallAvatar,
+            inquiryType: 'admin_support',
+            relatedOrderId: conv.relatedOrderId,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(
+            content: Text('Unable to connect to Admin: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -85,13 +167,28 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
                           color: Color(0xFFEF4444),
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          'Error loading messages: $error',
+                        const Text(
+                          'Unable to load messages. Please try again.',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             color: AppTheme.textSecondary,
                           ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            ref.invalidate(vendorConversationsProvider);
+                            ref.invalidate(customerConversationsProvider);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryGreen,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Retry'),
                         ),
                       ],
                     ),
@@ -196,61 +293,87 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
               ],
             ),
           ),
-          // Notification Bell
+          // Direct Messaging to Admin Button (Replaces Notification Bell)
           Consumer(
             builder: (context, ref, _) {
-              final notifService = ref.read(notificationServiceProvider);
-              return ListenableBuilder(
-                listenable: notifService,
-                builder: (context, _) {
-                  final unread = isVendor
-                      ? notifService.vendorUnreadCount
-                      : notifService.customerUnreadCount;
+              final conversationsAsync = isVendor
+                  ? ref.watch(vendorConversationsProvider)
+                  : ref.watch(customerConversationsProvider);
+              final hasAdminUnread = conversationsAsync.maybeWhen(
+                data: (convs) => convs.any(
+                  (c) =>
+                      (c.inquiryType == 'admin_support' ||
+                          c.customerUid == 'admin_support' ||
+                          c.stallId == 'admin_support') &&
+                      (isVendor
+                          ? c.vendorUnreadCount > 0
+                          : c.customerUnreadCount > 0),
+                ),
+                orElse: () => false,
+              );
 
-                  return GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        PageTransitions.slideFromRight(
-                          isVendor
-                              ? const VendorNotificationsScreen()
-                              : const NotificationsScreen(),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppTheme.scaffoldBackground,
-                        borderRadius: BorderRadius.circular(20),
+              return Tooltip(
+                message: 'Message Admin Directly',
+                child: GestureDetector(
+                  key: const Key('messages_admin_chat_button'),
+                  onTap: () => _openAdminChat(context, isVendor),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.primaryGreen.withValues(alpha: 0.25),
+                        width: 1.5,
                       ),
-                      child: Stack(
-                        children: [
-                          const Center(
-                            child: Icon(
-                              Icons.notifications_outlined,
-                              color: AppTheme.primaryGreen,
-                              size: 20,
+                    ),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.center,
+                      children: [
+                        const Icon(
+                          Icons.support_agent_rounded,
+                          color: AppTheme.primaryGreen,
+                          size: 24,
+                        ),
+                        Positioned(
+                          top: 4,
+                          right: 3,
+                          child: Container(
+                            padding: const EdgeInsets.all(1.5),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.chat_bubble_rounded,
+                              color: Color(0xFF0284C7),
+                              size: 10,
                             ),
                           ),
-                          if (unread > 0)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFEF4444),
-                                  shape: BoxShape.circle,
+                        ),
+                        if (hasAdminUnread)
+                          Positioned(
+                            top: 1,
+                            right: 1,
+                            child: Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 1.5,
                                 ),
                               ),
                             ),
-                        ],
-                      ),
+                          ),
+                      ],
                     ),
-                  );
-                },
+                  ),
+                ),
               );
             },
           ),
@@ -277,8 +400,8 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
           children: [
             const Icon(
               Icons.search_rounded,
-              color: Color(0xFF64748B),
               size: 20,
+              color: AppTheme.muted,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -286,20 +409,20 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
                 controller: _searchController,
                 onChanged: (val) => setState(() => _searchQuery = val.trim()),
                 style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF0F172A),
+                  fontSize: 14,
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w500,
                 ),
                 decoration: InputDecoration(
                   hintText: hintText,
                   hintStyle: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF94A3B8),
+                    fontSize: 14,
+                    color: AppTheme.muted,
+                    fontWeight: FontWeight.w400,
                   ),
                   border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
                   isDense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             ),
@@ -311,8 +434,8 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
                 },
                 child: const Icon(
                   Icons.close_rounded,
-                  color: Color(0xFF94A3B8),
                   size: 18,
+                  color: AppTheme.muted,
                 ),
               ),
           ],
@@ -326,76 +449,64 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
     List<ChatConversation> allConversations,
     bool isVendor,
   ) {
-    // Filter by tab
-    final unreadList = allConversations.where((c) {
-      final unread = isVendor ? c.vendorUnreadCount : c.customerUnreadCount;
-      return unread > 0;
+    // 1. Filter counts
+    final allCount = allConversations.length;
+    final unreadCount = allConversations
+        .where((c) => isVendor ? c.hasUnreadForVendor() : c.hasUnreadForCustomer())
+        .length;
+    final ordersCount = allConversations
+        .where((c) => c.relatedOrderId != null || c.inquiryType == 'order')
+        .length;
+
+    // 2. Active Tab Filtering
+    List<ChatConversation> filteredList = allConversations.where((c) {
+      if (_selectedFilter == MessageFilter.unread) {
+        return isVendor ? c.hasUnreadForVendor() : c.hasUnreadForCustomer();
+      }
+      if (_selectedFilter == MessageFilter.orders) {
+        return c.relatedOrderId != null || c.inquiryType == 'order';
+      }
+      return true;
     }).toList();
 
-    final ordersList = allConversations.where((c) {
-      return c.inquiryType == 'order' || c.relatedOrderId != null;
-    }).toList();
-
-    List<ChatConversation> filteredList;
-    switch (_selectedFilter) {
-      case MessageFilter.all:
-        filteredList = allConversations;
-        break;
-      case MessageFilter.unread:
-        filteredList = unreadList;
-        break;
-      case MessageFilter.orders:
-        filteredList = ordersList;
-        break;
-    }
-
-    // Filter by search query
+    // 3. Search Query Filtering
     if (_searchQuery.isNotEmpty) {
-      final query = _searchQuery.toLowerCase();
+      final q = _searchQuery.toLowerCase();
       filteredList = filteredList.where((c) {
         final name = (isVendor ? c.customerName : c.stallName).toLowerCase();
         final text = c.lastMessageText.toLowerCase();
         final orderId = c.relatedOrderId?.toLowerCase() ?? '';
-        return name.contains(query) ||
-            text.contains(query) ||
-            orderId.contains(query);
+        return name.contains(q) || text.contains(q) || orderId.contains(q);
       }).toList();
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Filter Chips Row
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: MessagesFilterChips(
-            selectedFilter: _selectedFilter,
-            onSelected: (filter) => setState(() => _selectedFilter = filter),
-            allCount: allConversations.length,
-            unreadCount: unreadList.length,
-            ordersCount: ordersList.length,
-          ),
+        MessagesFilterChips(
+          selectedFilter: _selectedFilter,
+          allCount: allCount,
+          unreadCount: unreadCount,
+          ordersCount: ordersCount,
+          onSelected: (filter) {
+            setState(() => _selectedFilter = filter);
+          },
         ),
-        const SizedBox(height: 14),
-        // Conversation List
+        const SizedBox(height: 8),
+        // Conversation List or Empty State
         Expanded(
           child: RefreshIndicator(
             color: AppTheme.primaryGreen,
             onRefresh: () async {
-              if (isVendor) {
-                ref.invalidate(vendorConversationsProvider);
-              } else {
-                ref.invalidate(customerConversationsProvider);
-              }
+              ref.invalidate(vendorConversationsProvider);
+              ref.invalidate(customerConversationsProvider);
             },
             child: filteredList.isEmpty
-                ? LayoutBuilder(
-                    builder: (context, constraints) => SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: constraints.maxHeight,
-                        ),
+                ? SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.45,
+                      child: Center(
                         child: _buildEmptyState(isVendor),
                       ),
                     ),

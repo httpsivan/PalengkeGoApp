@@ -20,6 +20,7 @@ import 'core/services/preferences_provider.dart';
 import 'core/presentation/pages/startup_error_screen.dart';
 import 'core/infrastructure/firebase_service.dart';
 import 'core/infrastructure/supabase_service.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -146,11 +147,22 @@ Future<void> main() async {
     ],
   );
 
+  // Pre-warms liquid glass shaders for smooth rendering
+  try {
+    await LiquidGlassWidgets.initialize();
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('[LiquidGlass] Prewarm skipped: $e');
+    }
+  }
+
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: const SafeVsyncProviderScope(
-        child: PalengkeGoApp(),
+      child: SafeVsyncProviderScope(
+        child: LiquidGlassWidgets.wrap(
+          child: const PalengkeGoApp(),
+        ),
       ),
     ),
   );

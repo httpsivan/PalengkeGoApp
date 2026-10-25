@@ -193,8 +193,10 @@ class _MarketStallBrowserState extends ConsumerState<MarketStallBrowser> {
                         itemBuilder: (context, index) {
                           final vendor = filteredVendors[index];
                           return AnimatedEntrance(
+                            key: ValueKey('browser_entrance_${vendor.id}'),
                             index: index,
                             child: StallCard(
+                              key: ValueKey('browser_stall_${vendor.id}'),
                               vendor: vendor,
                               selectedCategory: _selectedCategory,
                             ),
@@ -212,6 +214,7 @@ class _MarketStallBrowserState extends ConsumerState<MarketStallBrowser> {
     );
   }
 }
+
 
 /// Pill chip for top-level market categories (All, Fresh Fish, Meat, etc.).
 class MarketCategoryChip extends StatelessWidget {

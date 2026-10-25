@@ -209,6 +209,28 @@ class ConversationCard extends ConsumerWidget {
   }
 
   Widget _buildAvatar(String name, String? avatarUrl) {
+    final isAdmin = name.toLowerCase().contains('admin') ||
+        conversation.inquiryType == 'admin_support' ||
+        conversation.customerUid == 'admin_support' ||
+        conversation.stallId == 'admin_support';
+
+    if (isAdmin) {
+      return Container(
+        width: 46,
+        height: 46,
+        decoration: const BoxDecoration(
+          color: Color(0xFFE0F2FE),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.support_agent_rounded,
+          color: Color(0xFF0284C7),
+          size: 26,
+        ),
+      );
+    }
+
     final initials = name.trim().isNotEmpty
         ? name
             .trim()
@@ -279,7 +301,13 @@ class ConversationCard extends ConsumerWidget {
     Color bgColor;
     Color fgColor;
 
-    if (conversation.inquiryType == 'order') {
+    if (conversation.inquiryType == 'admin_support' ||
+        conversation.inquiryType == 'support') {
+      icon = Icons.admin_panel_settings_outlined;
+      label = 'Admin Support';
+      bgColor = const Color(0xFFE8F5E9);
+      fgColor = AppTheme.primaryGreen;
+    } else if (conversation.inquiryType == 'order') {
       icon = Icons.receipt_long_outlined;
       label = conversation.relatedOrderId != null
           ? 'Order #${conversation.relatedOrderId}'
@@ -308,7 +336,7 @@ class ConversationCard extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 13, color: fgColor),
-          const SizedBox(width: 5),
+          const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(

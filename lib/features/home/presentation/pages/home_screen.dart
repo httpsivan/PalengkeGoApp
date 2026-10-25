@@ -341,8 +341,12 @@ class HomeScreen extends ConsumerWidget {
                                       itemBuilder: (context, index) {
                                         final vendor = vendors[index];
                                         return AnimatedEntrance(
+                                          key: ValueKey('entrance_${vendor.id}'),
                                           index: index + 1,
-                                          child: StallCard(vendor: vendor),
+                                          child: StallCard(
+                                            key: ValueKey('stall_${vendor.id}'),
+                                            vendor: vendor,
+                                          ),
                                         );
                                       },
                                     );

@@ -112,3 +112,5 @@ deps.txt
 
 # Agent instructions (local only)
 /AGENTS.md
+
+.gradle-user/

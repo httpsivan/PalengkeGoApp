@@ -148,6 +148,39 @@ void main() {
       expect(find.text('All (2)'), findsOneWidget);
       expect(find.text('Unread (1)'), findsOneWidget);
     });
+
+    testWidgets(
+      'displays admin support icon in header without notification bell and opens chat on tap',
+      (tester) async {
+        await tester.pumpWidget(
+          wrap(
+            const MessagesInboxScreen(
+              isEmbeddedInTab: false,
+              isVendorView: true,
+            ),
+            user: MockUsers.vendor,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Notification bell should NOT be present on MessagesInboxScreen
+        expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
+        expect(find.byIcon(Icons.notifications_outlined), findsNothing);
+        expect(find.byIcon(Icons.notifications), findsNothing);
+
+        // Admin messaging icon should be present in the header
+        final adminButton = find.byIcon(Icons.support_agent_rounded);
+        expect(adminButton, findsOneWidget);
+
+        // Tapping admin messaging icon should open Admin ChatScreen
+        await tester.tap(adminButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('PalengkeGo Admin'), findsOneWidget);
+        expect(find.text('Official Admin Support'), findsOneWidget);
+        expect(find.text('Direct Admin Support Channel'), findsOneWidget);
+      },
+    );
   });
 
   group('Customer HomeHeader Messages Icon', () {

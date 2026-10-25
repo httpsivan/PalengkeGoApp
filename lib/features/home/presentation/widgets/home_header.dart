@@ -32,9 +32,12 @@ class HomeHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifService = ref.read(notificationServiceProvider);
-    final unreadMessagesCount = ref.watch(customerUnreadMessagesCountProvider);
-    final profileAsync = ref.watch(currentProfileProvider);
     final user = ref.watch(authProvider);
+    final isVendorUser = user?.isVendor ?? false;
+    final unreadMessagesCount = isVendorUser
+        ? ref.watch(vendorUnreadMessagesCountProvider)
+        : ref.watch(customerUnreadMessagesCountProvider);
+    final profileAsync = ref.watch(currentProfileProvider);
     final prefs = ref.watch(preferencesProvider);
 
     final profile = profileAsync.asData?.value;
@@ -167,7 +170,7 @@ class HomeHeader extends ConsumerWidget {
           ),
           const SizedBox(width: 8),
 
-          // Messages Button (Customer Stall Holder Conversation History)
+          // Messages Button (Customer or Vendor Conversation History)
           GestureDetector(
             key: const Key('home_header_messages_button'),
             onTap: () {
@@ -178,11 +181,13 @@ class HomeHeader extends ConsumerWidget {
                   message: 'You must be logged in to view your messages.',
                   onSuccess: () {
                     if (context.mounted) {
+                      final isVendor =
+                          ref.read(authProvider)?.isVendor ?? false;
                       Navigator.of(context).push(
                         PageTransitions.slideFromRight(
-                          const MessagesInboxScreen(
+                          MessagesInboxScreen(
                             isEmbeddedInTab: false,
-                            isVendorView: false,
+                            isVendorView: isVendor,
                           ),
                         ),
                       );
@@ -191,11 +196,12 @@ class HomeHeader extends ConsumerWidget {
                 );
                 return;
               }
+              final isVendor = currentUser.isVendor;
               Navigator.of(context).push(
                 PageTransitions.slideFromRight(
-                  const MessagesInboxScreen(
+                  MessagesInboxScreen(
                     isEmbeddedInTab: false,
-                    isVendorView: false,
+                    isVendorView: isVendor,
                   ),
                 ),
               );

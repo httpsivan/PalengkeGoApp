@@ -737,7 +737,7 @@ class SharedMessagingStore {
 
     // Create new conversation
     final now = DateTime.now();
-    final newConv = ChatConversation(
+    ChatConversation newConv = ChatConversation(
       id: 'conv_${customerUid}_$normalizedStallId',
       stallId: normalizedStallId,
       stallName: stallName,
@@ -756,8 +756,35 @@ class SharedMessagingStore {
       updatedAt: now,
     );
 
+    final isAdminConversation = inquiryType == 'admin_support' ||
+        customerUid == 'admin_support' ||
+        normalizedStallId == 'admin_support';
+
+    if (isAdminConversation) {
+      final welcomeMsg = ChatMessage(
+        id: 'msg_admin_welcome_${now.millisecondsSinceEpoch}',
+        conversationId: newConv.id,
+        senderId: 'admin_support',
+        senderName: 'PalengkeGo Admin',
+        senderRole: 'admin',
+        text:
+            'Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.',
+        timestamp: now,
+        isRead: false,
+      );
+      _messages[newConv.id] = [welcomeMsg];
+      newConv = newConv.copyWith(
+        lastMessageText: welcomeMsg.text,
+        lastMessageTimestamp: now,
+        lastMessageSenderId: 'admin_support',
+        vendorUnreadCount: normalizedStallId != 'admin_support' ? 1 : 0,
+        customerUnreadCount: customerUid != 'admin_support' ? 1 : 0,
+      );
+    } else {
+      _messages[newConv.id] = [];
+    }
+
     _conversations.insert(0, newConv);
-    _messages[newConv.id] = [];
     _notifyConversations();
     _notifyMessages(newConv.id);
     await save();
@@ -817,6 +844,46 @@ class SharedMessagingStore {
     _notifyMessages(conversationId);
     _notifyConversations();
     await save();
+
+    // If sent to admin support, schedule an automated acknowledgement so the user gets an instant reply
+    if (conversationId.contains('admin_support') && senderRole != 'admin') {
+      Future.delayed(const Duration(milliseconds: 600), () {
+        final replyTime = DateTime.now();
+        final adminReply = ChatMessage(
+          id: 'msg_admin_reply_${replyTime.millisecondsSinceEpoch}',
+          conversationId: conversationId,
+          senderId: 'admin_support',
+          senderName: 'PalengkeGo Admin',
+          senderRole: 'admin',
+          text:
+              'Thank you for reaching out! Our Admin Support team has received your message and will review it shortly.',
+          timestamp: replyTime,
+          isRead: false,
+        );
+        final currentMsgs = _messages.putIfAbsent(conversationId, () => []);
+        currentMsgs.add(adminReply);
+        final idx = _conversations.indexWhere((c) => c.id == conversationId);
+        if (idx != -1) {
+          _conversations[idx] = _conversations[idx].copyWith(
+            lastMessageText: adminReply.text,
+            lastMessageTimestamp: replyTime,
+            lastMessageSenderId: 'admin_support',
+            vendorUnreadCount: _conversations[idx].stallId != 'admin_support'
+                ? _conversations[idx].vendorUnreadCount + 1
+                : 0,
+            customerUnreadCount:
+                _conversations[idx].customerUid != 'admin_support'
+                    ? _conversations[idx].customerUnreadCount + 1
+                    : 0,
+            updatedAt: replyTime,
+          );
+        }
+        _notifyMessages(conversationId);
+        _notifyConversations();
+        save();
+      });
+    }
+
     return message;
   }
 

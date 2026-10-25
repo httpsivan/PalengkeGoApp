@@ -366,24 +366,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, String? avatarUrl) {
+    final isAdmin = widget.inquiryType == 'admin_support' ||
+        widget.displayName.toLowerCase().contains('admin');
+
     final fallbackAvatar = Container(
       width: 36,
       height: 36,
-      decoration: const BoxDecoration(
-        color: Color(0xFFE8F5E9),
+      decoration: BoxDecoration(
+        color: isAdmin ? const Color(0xFFE0F2FE) : const Color(0xFFE8F5E9),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
-      child: Text(
-        widget.displayName.trim().isNotEmpty
-            ? widget.displayName.trim()[0].toUpperCase()
-            : 'P',
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: AppTheme.primaryGreen,
-        ),
-      ),
+      child: isAdmin
+          ? const Icon(
+              Icons.support_agent_rounded,
+              color: Color(0xFF0284C7),
+              size: 22,
+            )
+          : Text(
+              widget.displayName.trim().isNotEmpty
+                  ? widget.displayName.trim()[0].toUpperCase()
+                  : 'P',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.primaryGreen,
+              ),
+            ),
     );
 
     return AppBar(
@@ -435,7 +444,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  widget.isVendorView ? 'Customer' : 'Stall Holder',
+                  isAdmin
+                      ? 'Official Admin Support'
+                      : (widget.isVendorView ? 'Customer' : 'Stall Holder'),
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
@@ -455,7 +466,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     IconData icon;
     Color color;
 
-    if (widget.relatedOrderId != null || widget.inquiryType == 'order') {
+    if (widget.inquiryType == 'admin_support' ||
+        widget.displayName.toLowerCase().contains('admin')) {
+      label = 'Direct Admin Support Channel';
+      icon = Icons.admin_panel_settings_outlined;
+      color = const Color(0xFF0284C7);
+    } else if (widget.relatedOrderId != null || widget.inquiryType == 'order') {
       label = widget.relatedOrderId != null
           ? 'Related to Order #${widget.relatedOrderId}'
           : 'Order Inquiry';

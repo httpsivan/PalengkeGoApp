@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
 /// Compact floating pill navigation bar.
 /// Features an iPhone Liquid Glass pill background with real-time backdrop blur,
@@ -25,29 +25,6 @@ class AppBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-
-    // iPhone Liquid Glass multi-stop translucent specular gradient
-    final glassGradient = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      stops: const [0.0, 0.38, 0.72, 1.0],
-      colors: isDark
-          ? [
-              const Color(0xFF1E293B).withValues(alpha: 0.72),
-              const Color(0xFF0F172A).withValues(alpha: 0.52),
-              const Color(0xFF1E293B).withValues(alpha: 0.60),
-              const Color(0xFF334155).withValues(alpha: 0.70),
-            ]
-          : [
-              Colors.white.withValues(alpha: 0.75),
-              Colors.white.withValues(alpha: 0.44),
-              Colors.white.withValues(alpha: 0.54),
-              Colors.white.withValues(alpha: 0.72),
-            ],
-    );
-    final outerRing = isDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.85);
 
     // Lush Emerald Gradient for the sliding active indicator
     final activeGradient = LinearGradient(
@@ -90,38 +67,43 @@ class AppBottomNavBar extends StatelessWidget {
           heightFactor: 1.0,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
-            child: Container(
+            child: GlassContainer(
               height: navHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(32),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.14),
-                    blurRadius: 24,
-                    spreadRadius: 0,
-                    offset: const Offset(0, 8),
-                  ),
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.45),
-                    blurRadius: 6,
-                    spreadRadius: -1,
-                    offset: const Offset(0, -1),
-                  ),
-                ],
+              useOwnLayer: true,
+              quality: GlassQuality.premium,
+              clipBehavior: Clip.antiAlias,
+              shape: const LiquidRoundedSuperellipse(borderRadius: 32),
+              settings: LiquidGlassSettings(
+                // Real glass: thick lens, strong bend, almost no tint so the
+                // content behind is visibly refracted rather than covered.
+                thickness: 32,
+                blur: 6,
+                refractiveIndex: 1.45,
+                chromaticAberration: 0.02,
+                lightIntensity: 0.9,
+                lightAngle: 0.8 * 3.1415926,
+                fresnelStrength: 1.2,
+                specularSharpness: GlassSpecularSharpness.sharp,
+                ambientStrength: 0.12,
+                saturation: 1.25,
+                glowIntensity: 0.4,
+                glassColor: isDark
+                    ? const Color(0xFF0F172A).withValues(alpha: 0.12)
+                    : Colors.white.withValues(alpha: 0.08),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(32),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: glassGradient,
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: outerRing, width: 1.3),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.18),
+                      blurRadius: 28,
+                      offset: const Offset(0, 10),
                     ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-                    child: Stack(
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                child: Stack(
                       fit: StackFit.expand,
                       children: [
                         // Smooth sliding highlight indicator
@@ -279,9 +261,7 @@ class AppBottomNavBar extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    ),
-  );
+    );
   }
 
   static Widget _svgIcon({
