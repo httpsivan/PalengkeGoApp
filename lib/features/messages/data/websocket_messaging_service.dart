@@ -19,6 +19,7 @@ class WebSocketMessagingService {
   final Map<String, Timer> _typingTimers = {};
   final Map<String, Set<String>> _typingCurrentUsers = {};
   final Map<String, StreamController<ChatMessage>> _messageControllers = {};
+  final Map<String, Timer> _reconnectTimers = {};
 
   bool get isAvailable => _client != null;
 
@@ -102,6 +103,21 @@ class WebSocketMessagingService {
     channel.subscribe((status, error) {
       if (kDebugMode) {
         debugPrint('[WebSocket] Channel $channelName status: $status (error: $error)');
+      }
+      if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.closed) {
+        _activeChannels.remove(conversationId);
+
+        if (status == RealtimeSubscribeStatus.channelError) {
+          // Token expired or temporary network drop; auto-reconnect after backoff
+          _reconnectTimers[conversationId]?.cancel();
+          _reconnectTimers[conversationId] = Timer(const Duration(milliseconds: 1500), () {
+            if (_typingControllers.containsKey(conversationId) ||
+                _messageControllers.containsKey(conversationId)) {
+              subscribeToConversation(conversationId: conversationId);
+            }
+          });
+        }
       }
     });
 
@@ -228,6 +244,8 @@ class WebSocketMessagingService {
     if (channel != null && _client != null) {
       _client.removeChannel(channel);
     }
+    _reconnectTimers[conversationId]?.cancel();
+    _reconnectTimers.remove(conversationId);
     _typingTimers[conversationId]?.cancel();
     _typingTimers.remove(conversationId);
     _typingControllers[conversationId]?.close();
@@ -243,6 +261,10 @@ class WebSocketMessagingService {
       _client?.removeChannel(entry.value);
     }
     _activeChannels.clear();
+    for (final timer in _reconnectTimers.values) {
+      timer.cancel();
+    }
+    _reconnectTimers.clear();
     for (final timer in _typingTimers.values) {
       timer.cancel();
     }

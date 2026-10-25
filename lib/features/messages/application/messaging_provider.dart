@@ -28,7 +28,18 @@ final messagingClientProvider = Provider<SupabaseClient?>((ref) {
     accessToken: () async {
       final user = auth?.currentUser;
       if (user == null || user.uid != uid) return null;
-      final token = await user.getIdTokenResult();
+
+      // Force refresh token if expired or about to expire within 3 minutes
+      var token = await user.getIdTokenResult();
+      final exp = token.expirationTime;
+      final isExpiredOrExpiringSoon = exp == null ||
+          exp.toUtc().isBefore(DateTime.now().toUtc().add(const Duration(minutes: 3)));
+
+      if (isExpiredOrExpiringSoon) {
+        await user.getIdToken(true);
+        token = await user.getIdTokenResult();
+      }
+
       if (token.claims?['role'] == 'authenticated') return token.token;
       try {
         await (authSetup ??= backend.functions.invoke(
@@ -37,7 +48,6 @@ final messagingClientProvider = Provider<SupabaseClient?>((ref) {
         ));
       } catch (_) {
         authSetup = null;
-        rethrow;
       }
       return user.getIdToken(true);
     },
