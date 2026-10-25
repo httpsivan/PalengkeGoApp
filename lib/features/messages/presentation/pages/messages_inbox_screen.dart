@@ -296,21 +296,11 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
           // Direct Messaging to Admin Button (Replaces Notification Bell)
           Consumer(
             builder: (context, ref, _) {
-              final conversationsAsync = isVendor
-                  ? ref.watch(vendorConversationsProvider)
-                  : ref.watch(customerConversationsProvider);
-              final hasAdminUnread = conversationsAsync.maybeWhen(
-                data: (convs) => convs.any(
-                  (c) =>
-                      (c.inquiryType == 'admin_support' ||
-                          c.customerUid == 'admin_support' ||
-                          c.stallId == 'admin_support') &&
-                      (isVendor
-                          ? c.vendorUnreadCount > 0
-                          : c.customerUnreadCount > 0),
-                ),
-                orElse: () => false,
-              );
+              final hasAdminUnread = ref
+                      .watch(adminHasUnreadProvider(isVendor))
+                      .asData
+                      ?.value ??
+                  false;
 
               return Tooltip(
                 message: 'Message Admin Directly',
@@ -446,9 +436,21 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
 
   Widget _buildConversationContent(
     BuildContext context,
-    List<ChatConversation> allConversations,
+    List<ChatConversation> rawConversations,
     bool isVendor,
   ) {
+    // Exclude admin support conversations from customer and vendor message history.
+    // Direct admin communication is handled exclusively via the "Message Admin Directly" button.
+    final allConversations = rawConversations.where((c) {
+      final isAdmin = c.inquiryType == 'admin_support' ||
+          c.customerUid == 'admin_support' ||
+          c.stallId == 'admin_support' ||
+          c.id.contains('admin_support') ||
+          c.stallName.toLowerCase().contains('admin') ||
+          c.customerName.toLowerCase().contains('admin');
+      return !isAdmin;
+    }).toList();
+
     // 1. Filter counts
     final allCount = allConversations.length;
     final unreadCount = allConversations

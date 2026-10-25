@@ -181,6 +181,50 @@ void main() {
         expect(find.text('Direct Admin Support Channel'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'excludes admin support conversations from customer and vendor inbox history list',
+      (tester) async {
+        // Register an admin conversation with Rosario Britanico in the store
+        await messagingStore.getOrCreateConversation(
+          customerUid: 'cust_test_user',
+          customerName: 'Rosario Britanico',
+          stallId: 'admin_support',
+          stallName: 'PalengkeGo Admin',
+          inquiryType: 'admin_support',
+        );
+
+        // 1. Verify Vendor view does NOT show Rosario Britanico Admin Support in conversation list
+        await tester.pumpWidget(
+          wrap(
+            const MessagesInboxScreen(
+              isEmbeddedInTab: false,
+              isVendorView: true,
+            ),
+            user: MockUsers.vendor,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Rosario Britanico'), findsNothing);
+        expect(find.text('Admin Support'), findsNothing);
+
+        // 2. Verify Customer view does NOT show Admin Support in conversation list
+        await tester.pumpWidget(
+          wrap(
+            const MessagesInboxScreen(
+              isEmbeddedInTab: false,
+              isVendorView: false,
+            ),
+            user: MockUsers.customer,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Rosario Britanico'), findsNothing);
+        expect(find.text('Admin Support'), findsNothing);
+      },
+    );
   });
 
   group('Customer HomeHeader Messages Icon', () {

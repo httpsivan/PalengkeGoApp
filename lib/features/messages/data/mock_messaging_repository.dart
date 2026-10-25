@@ -18,12 +18,16 @@ class MockMessagingRepository implements MessagingRepository {
     return _store.watchConversations().map((list) {
       return list
           .where((c) =>
-              c.stallId == normalizedStallId ||
-              c.stallId == stallId ||
-              (normalizedStallId == 'v1' &&
-                  (c.stallId == 'v1' ||
-                      c.stallId == 'stall holder-001' ||
-                      c.stallId == 'vendor-001')))
+              c.inquiryType != 'admin_support' &&
+              c.stallId != 'admin_support' &&
+              c.customerUid != 'admin_support' &&
+              !c.id.contains('admin_support') &&
+              (c.stallId == normalizedStallId ||
+                  c.stallId == stallId ||
+                  (normalizedStallId == 'v1' &&
+                      (c.stallId == 'v1' ||
+                          c.stallId == 'stall holder-001' ||
+                          c.stallId == 'vendor-001'))))
           .toList();
     });
   }
@@ -33,7 +37,14 @@ class MockMessagingRepository implements MessagingRepository {
     String customerUid,
   ) {
     return _store.watchConversations().map((list) {
-      return list.where((c) => c.customerUid == customerUid).toList();
+      return list
+          .where((c) =>
+              c.inquiryType != 'admin_support' &&
+              c.stallId != 'admin_support' &&
+              c.customerUid != 'admin_support' &&
+              !c.id.contains('admin_support') &&
+              c.customerUid == customerUid)
+          .toList();
     });
   }
 
@@ -53,12 +64,16 @@ class MockMessagingRepository implements MessagingRepository {
             : stallId;
     return _store.conversations
         .where((c) =>
-            c.stallId == normalizedStallId ||
-            c.stallId == stallId ||
-            (normalizedStallId == 'v1' &&
-                (c.stallId == 'v1' ||
-                    c.stallId == 'stall holder-001' ||
-                    c.stallId == 'vendor-001')))
+            c.inquiryType != 'admin_support' &&
+            c.stallId != 'admin_support' &&
+            c.customerUid != 'admin_support' &&
+            !c.id.contains('admin_support') &&
+            (c.stallId == normalizedStallId ||
+                c.stallId == stallId ||
+                (normalizedStallId == 'v1' &&
+                    (c.stallId == 'v1' ||
+                        c.stallId == 'stall holder-001' ||
+                        c.stallId == 'vendor-001'))))
         .toList();
   }
 
@@ -68,7 +83,12 @@ class MockMessagingRepository implements MessagingRepository {
   ) async {
     await _store.load();
     return _store.conversations
-        .where((c) => c.customerUid == customerUid)
+        .where((c) =>
+            c.inquiryType != 'admin_support' &&
+            c.stallId != 'admin_support' &&
+            c.customerUid != 'admin_support' &&
+            !c.id.contains('admin_support') &&
+            c.customerUid == customerUid)
         .toList();
   }
 
