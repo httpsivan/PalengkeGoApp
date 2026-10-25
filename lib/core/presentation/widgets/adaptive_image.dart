@@ -60,7 +60,7 @@ class AdaptiveImage extends StatelessWidget {
       return _buildPlaceholder();
     }
 
-    if (resolvedPath.startsWith('data:image/')) {
+    if (resolvedPath.startsWith('data:image')) {
       final bytes = getOrDecodeBase64(resolvedPath);
       if (bytes != null) {
         return Image.memory(

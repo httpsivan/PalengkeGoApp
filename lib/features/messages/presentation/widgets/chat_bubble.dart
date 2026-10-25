@@ -1,8 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:palengkego/core/presentation/widgets/adaptive_image.dart';
 import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/features/messages/domain/chat_message.dart';
 
@@ -38,40 +36,6 @@ class ChatBubble extends StatelessWidget {
         barrierDismissible: true,
         barrierColor: Colors.black87,
         pageBuilder: (context, animation, secondaryAnimation) {
-          Widget img;
-          if (url.startsWith('data:image')) {
-            try {
-              final commaIndex = url.indexOf(',');
-              final base64String =
-                  commaIndex != -1 ? url.substring(commaIndex + 1) : url;
-              img = Image.memory(base64Decode(base64String));
-            } catch (_) {
-              img = const Icon(
-                Icons.broken_image_rounded,
-                color: Colors.white70,
-                size: 64,
-              );
-            }
-          } else if (url.startsWith('http://') || url.startsWith('https://')) {
-            img = CachedNetworkImage(
-              imageUrl: url,
-              errorWidget: (context, url, error) => const Icon(
-                Icons.broken_image_rounded,
-                color: Colors.white70,
-                size: 64,
-              ),
-            );
-          } else {
-            final f = File(url);
-            img = f.existsSync()
-                ? Image.file(f)
-                : const Icon(
-                    Icons.broken_image_rounded,
-                    color: Colors.white70,
-                    size: 64,
-                  );
-          }
-
           return Scaffold(
             backgroundColor: Colors.transparent,
             appBar: AppBar(
@@ -87,7 +51,15 @@ class ChatBubble extends StatelessWidget {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4.0,
-                child: img,
+                child: AdaptiveImage(
+                  url,
+                  fit: BoxFit.contain,
+                  placeholder: const Center(
+                    child: CircularProgressIndicator(
+                      color: AppTheme.primaryGreen,
+                    ),
+                  ),
+                ),
               ),
             ),
           );
@@ -98,50 +70,6 @@ class ChatBubble extends StatelessWidget {
 
   Widget _buildAttachment(BuildContext context) {
     final url = message.attachmentUrl!;
-    Widget imageWidget;
-
-    if (url.startsWith('data:image')) {
-      try {
-        final commaIndex = url.indexOf(',');
-        final base64String =
-            commaIndex != -1 ? url.substring(commaIndex + 1) : url;
-        final bytes = base64Decode(base64String);
-        imageWidget = Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _errorPlaceholder(),
-        );
-      } catch (_) {
-        imageWidget = _errorPlaceholder();
-      }
-    } else if (url.startsWith('http://') || url.startsWith('https://')) {
-      imageWidget = CachedNetworkImage(
-        imageUrl: url,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Container(
-          color: Colors.black12,
-          child: const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          ),
-        ),
-        errorWidget: (context, url, error) => _errorPlaceholder(),
-      );
-    } else {
-      final file = File(url);
-      if (file.existsSync()) {
-        imageWidget = Image.file(
-          file,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _errorPlaceholder(),
-        );
-      } else {
-        imageWidget = _errorPlaceholder();
-      }
-    }
 
     return GestureDetector(
       onTap: () => _openFullScreenImage(context, url),
@@ -161,7 +89,11 @@ class ChatBubble extends StatelessWidget {
           alignment: Alignment.center,
           fit: StackFit.passthrough,
           children: [
-            imageWidget,
+            AdaptiveImage(
+              url,
+              fit: BoxFit.cover,
+              placeholder: _errorPlaceholder(),
+            ),
             Positioned(
               right: 6,
               bottom: 6,

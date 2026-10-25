@@ -248,8 +248,15 @@ final conversationMessagesProvider = StreamProvider.autoDispose
 final conversationTypingProvider = StreamProvider.autoDispose
     .family<bool, String>((ref, conversationId) {
       final wsService = ref.watch(webSocketMessagingServiceProvider);
-      final currentUserId = ref.watch(authProvider)?.uid ?? '';
-      return wsService.watchTyping(conversationId, currentUserId);
+      final user = ref.watch(authProvider);
+      final stall = ref.watch(vendorStallProvider);
+      final currentUserId = user?.uid ?? '';
+      final stallId = stall.stallId;
+      return wsService.watchTyping(
+        conversationId,
+        currentUserId,
+        stallId: stallId,
+      );
     });
 
 /// Total unread conversation count for vendor (used on badges).

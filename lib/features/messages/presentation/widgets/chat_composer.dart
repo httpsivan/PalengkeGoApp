@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:palengkego/core/presentation/widgets/adaptive_image.dart';
 import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/core/utils/image_picker_helper.dart';
 
@@ -235,18 +236,17 @@ class _ChatComposerState extends State<ChatComposer> {
                       color: const Color(0xFFF1F5F9),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: _selectedImageFile != null && !kIsWeb
-                        ? Image.file(
-                            _selectedImageFile!,
-                            fit: BoxFit.cover,
-                          )
-                        : const Center(
-                            child: Icon(
-                              Icons.image_rounded,
-                              color: AppTheme.primaryGreen,
-                              size: 32,
-                            ),
-                          ),
+                    child: AdaptiveImage(
+                      _selectedImageDataUri ?? _selectedImageFile?.path,
+                      fit: BoxFit.cover,
+                      placeholder: const Center(
+                        child: Icon(
+                          Icons.image_rounded,
+                          color: AppTheme.primaryGreen,
+                          size: 32,
+                        ),
+                      ),
+                    ),
                   ),
                   Positioned(
                     top: -6,

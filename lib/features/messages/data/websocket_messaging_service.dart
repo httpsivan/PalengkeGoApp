@@ -16,6 +16,7 @@ class WebSocketMessagingService {
   final Map<String, RealtimeChannel> _activeChannels = {};
   final Map<String, StreamController<bool>> _typingControllers = {};
   final Map<String, Timer> _typingTimers = {};
+  final Map<String, Set<String>> _typingCurrentUsers = {};
 
   bool get isAvailable => _client != null;
 
@@ -96,6 +97,9 @@ class WebSocketMessagingService {
     required String senderId,
     required bool isTyping,
   }) async {
+    final userSet = _typingCurrentUsers.putIfAbsent(conversationId, () => <String>{});
+    if (senderId.isNotEmpty) userSet.add(senderId);
+
     final channel = _activeChannels[conversationId];
     if (channel == null) return;
 
@@ -116,9 +120,16 @@ class WebSocketMessagingService {
   }
 
   /// Returns a stream of typing state for the counterpart in [conversationId].
-  Stream<bool> watchTyping(String conversationId, String currentUserId) {
+  Stream<bool> watchTyping(
+    String conversationId,
+    String currentUserId, {
+    String? stallId,
+  }) {
     _typingControllers[conversationId] ??= StreamController<bool>.broadcast();
-    return _typingControllers[conversationId]!.stream;
+    final userSet = _typingCurrentUsers.putIfAbsent(conversationId, () => <String>{});
+    if (currentUserId.isNotEmpty) userSet.add(currentUserId);
+    if (stallId != null && stallId.isNotEmpty) userSet.add(stallId);
+    return _typingControllers[conversationId]!.stream.distinct();
   }
 
   void _handleTypingReceived(
@@ -126,6 +137,12 @@ class WebSocketMessagingService {
     String senderId,
     bool isTyping,
   ) {
+    // If the sender is this local user/device, ignore self-typing echo
+    final currentUsers = _typingCurrentUsers[conversationId];
+    if (currentUsers != null && senderId.isNotEmpty && currentUsers.contains(senderId)) {
+      return;
+    }
+
     final controller = _typingControllers[conversationId];
     if (controller == null || controller.isClosed) return;
 
@@ -154,6 +171,7 @@ class WebSocketMessagingService {
     _typingTimers.remove(conversationId);
     _typingControllers[conversationId]?.close();
     _typingControllers.remove(conversationId);
+    _typingCurrentUsers.remove(conversationId);
   }
 
   /// Disposes all active WebSocket channels and controllers.
@@ -170,5 +188,6 @@ class WebSocketMessagingService {
       controller.close();
     }
     _typingControllers.clear();
+    _typingCurrentUsers.clear();
   }
 }
