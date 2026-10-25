@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:palengkego/features/messages/domain/chat_message.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Manages real-time WebSocket communication for in-app chat.
@@ -17,6 +18,7 @@ class WebSocketMessagingService {
   final Map<String, StreamController<bool>> _typingControllers = {};
   final Map<String, Timer> _typingTimers = {};
   final Map<String, Set<String>> _typingCurrentUsers = {};
+  final Map<String, StreamController<ChatMessage>> _messageControllers = {};
 
   bool get isAvailable => _client != null;
 
@@ -47,7 +49,23 @@ class WebSocketMessagingService {
       },
     );
 
-    // 2. WebSocket Postgres Changes: Insert (new message)
+    // 2. WebSocket Broadcast: Live message sync
+    channel.onBroadcast(
+      event: 'message',
+      callback: (payload) {
+        try {
+          final messageMap = Map<String, dynamic>.from(payload['message'] as Map);
+          final message = ChatMessage.fromJson(messageMap);
+          _handleMessageReceived(conversationId, message);
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[WebSocket] Error parsing broadcast message: $e');
+          }
+        }
+      },
+    );
+
+    // 3. WebSocket Postgres Changes: Insert (new message)
     channel.onPostgresChanges(
       event: PostgresChangeEvent.insert,
       schema: 'public',
@@ -100,7 +118,10 @@ class WebSocketMessagingService {
     final userSet = _typingCurrentUsers.putIfAbsent(conversationId, () => <String>{});
     if (senderId.isNotEmpty) userSet.add(senderId);
 
-    final channel = _activeChannels[conversationId];
+    var channel = _activeChannels[conversationId];
+    if (channel == null && _client != null) {
+      channel = subscribeToConversation(conversationId: conversationId);
+    }
     if (channel == null) return;
 
     try {
@@ -116,6 +137,46 @@ class WebSocketMessagingService {
       if (kDebugMode) {
         debugPrint('[WebSocket] Failed to send typing broadcast: $e');
       }
+    }
+  }
+
+  /// Broadcasts a newly sent chat message to all participants in [conversationId].
+  Future<void> broadcastMessage({
+    required String conversationId,
+    required ChatMessage message,
+  }) async {
+    var channel = _activeChannels[conversationId];
+    if (channel == null && _client != null) {
+      channel = subscribeToConversation(conversationId: conversationId);
+    }
+    if (channel == null) return;
+
+    try {
+      await channel.sendBroadcastMessage(
+        event: 'message',
+        payload: {
+          'conversation_id': conversationId,
+          'message': message.toJson(),
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[WebSocket] Failed to broadcast message: $e');
+      }
+    }
+  }
+
+  /// Returns a stream of real-time broadcasted messages for [conversationId].
+  Stream<ChatMessage> watchBroadcastMessages(String conversationId) {
+    _messageControllers[conversationId] ??= StreamController<ChatMessage>.broadcast();
+    return _messageControllers[conversationId]!.stream;
+  }
+
+  void _handleMessageReceived(String conversationId, ChatMessage message) {
+    final controller = _messageControllers[conversationId];
+    if (controller != null && !controller.isClosed) {
+      controller.add(message);
     }
   }
 
@@ -172,6 +233,8 @@ class WebSocketMessagingService {
     _typingControllers[conversationId]?.close();
     _typingControllers.remove(conversationId);
     _typingCurrentUsers.remove(conversationId);
+    _messageControllers[conversationId]?.close();
+    _messageControllers.remove(conversationId);
   }
 
   /// Disposes all active WebSocket channels and controllers.
@@ -188,6 +251,10 @@ class WebSocketMessagingService {
       controller.close();
     }
     _typingControllers.clear();
+    for (final controller in _messageControllers.values) {
+      controller.close();
+    }
+    _messageControllers.clear();
     _typingCurrentUsers.clear();
   }
 }

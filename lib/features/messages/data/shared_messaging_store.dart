@@ -887,6 +887,49 @@ class SharedMessagingStore {
     return message;
   }
 
+  void addMessage(ChatMessage message) {
+    final msgs = _messages.putIfAbsent(message.conversationId, () => []);
+    final existingIndex = msgs.indexWhere((m) => m.id == message.id);
+    if (existingIndex == -1) {
+      msgs.add(message);
+    } else {
+      msgs[existingIndex] = message;
+    }
+
+    _updateConversationSummary(message);
+    _notifyMessages(message.conversationId);
+    _notifyConversations();
+    save();
+  }
+
+  void addMessageSilently(ChatMessage message) {
+    final msgs = _messages.putIfAbsent(message.conversationId, () => []);
+    final existingIndex = msgs.indexWhere((m) => m.id == message.id);
+    if (existingIndex == -1) {
+      msgs.add(message);
+      _updateConversationSummary(message);
+    } else {
+      msgs[existingIndex] = message;
+    }
+  }
+
+  void _updateConversationSummary(ChatMessage message) {
+    final convIndex = _conversations.indexWhere((c) => c.id == message.conversationId);
+    if (convIndex != -1) {
+      final existing = _conversations[convIndex];
+      final previewText = message.text.isNotEmpty
+          ? message.text
+          : (message.attachmentUrl != null ? '📷 Photo' : '');
+      final updated = existing.copyWith(
+        lastMessageText: previewText,
+        lastMessageTimestamp: message.timestamp,
+        lastMessageSenderId: message.senderId,
+        updatedAt: message.timestamp,
+      );
+      _conversations[convIndex] = updated;
+    }
+  }
+
   Future<void> markAsRead({
     required String conversationId,
     required String readerRole,

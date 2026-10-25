@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:palengkego/features/messages/domain/chat_message.dart';
 import 'package:palengkego/features/messages/data/websocket_messaging_service.dart';
 
 void main() {
@@ -30,6 +31,31 @@ void main() {
         ),
         completes,
       );
+
+      service.dispose();
+    });
+    test('broadcastMessage without active channel completes safely without error', () async {
+      final service = WebSocketMessagingService(client: null);
+      final msg = ChatMessage(
+        id: 'test-1',
+        conversationId: 'conv-999',
+        senderId: 'user-1',
+        senderName: 'Test',
+        senderRole: 'customer',
+        text: 'Hello',
+        timestamp: DateTime.now(),
+      );
+
+      await expectLater(
+        service.broadcastMessage(
+          conversationId: 'conv-999',
+          message: msg,
+        ),
+        completes,
+      );
+
+      final stream = service.watchBroadcastMessages('conv-999');
+      expect(stream, isNotNull);
 
       service.dispose();
     });

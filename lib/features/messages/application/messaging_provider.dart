@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:palengkego/core/config/app_config.dart';
@@ -202,46 +203,88 @@ final customerConversationsProvider =
       }
     });
 
-/// Stream of messages for a single conversation.
+/// Stream of messages for a single conversation with instant live sync and deduplication.
 final conversationMessagesProvider = StreamProvider.autoDispose
-    .family<List<ChatMessage>, String>((ref, conversationId) async* {
+    .family<List<ChatMessage>, String>((ref, conversationId) {
       final repo = ref.watch(messagingRepositoryProvider);
       final store = ref.watch(sharedMessagingStoreProvider);
-      final isAdmin = conversationId.contains('admin_support');
+      final wsService = ref.watch(webSocketMessagingServiceProvider);
 
-      if (isAdmin) {
-        await store.load();
-        final local = store.getMessages(conversationId);
-        yield local;
-        yield* store.watchMessages(conversationId);
-        return;
+      final controller = StreamController<List<ChatMessage>>();
+      final messageMap = <String, ChatMessage>{};
+
+      void emitMerged() {
+        if (controller.isClosed) return;
+        final list = messageMap.values.toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        controller.add(list);
       }
 
-      var initial = <ChatMessage>[];
-      try {
-        initial = await repo.getMessages(conversationId);
-      } catch (_) {}
-
-      if (initial.isEmpty) {
-        await store.load();
-        final local = store.getMessages(conversationId);
-        if (local.isNotEmpty) {
-          initial = local;
-        }
-      }
-      yield initial;
-
-      try {
-        await for (final msgs in repo.watchMessages(conversationId)) {
-          if (msgs.isEmpty && initial.isNotEmpty) {
-            yield initial;
-          } else {
-            yield msgs;
+      void addMessages(Iterable<ChatMessage> msgs) {
+        bool changed = false;
+        for (final m in msgs) {
+          final existing = messageMap[m.id];
+          if (existing == null || existing.isRead != m.isRead || existing.text != m.text) {
+            messageMap[m.id] = m;
+            changed = true;
           }
         }
-      } catch (_) {
-        yield* store.watchMessages(conversationId);
+        if (changed) {
+          emitMerged();
+        }
       }
+
+      // 1. Initial load from local store (instant display with 0ms delay)
+      store.load().then((_) {
+        addMessages(store.getMessages(conversationId));
+      });
+
+      // 2. Fetch remote DB messages and update local store cache
+      Future<void> fetchRemote() async {
+        try {
+          final remote = await repo.getMessages(conversationId);
+          if (remote.isNotEmpty) {
+            addMessages(remote);
+            for (final m in remote) {
+              store.addMessageSilently(m);
+            }
+          }
+        } catch (_) {}
+      }
+
+      fetchRemote();
+
+      // 3. Listen to local store (fires instantly when local user sends message or marks read)
+      final storeSub = store.watchMessages(conversationId).listen((msgs) {
+        addMessages(msgs);
+      });
+
+      // 4. Listen to WebSocket live broadcasts (fires instantly when counterpart sends message)
+      final wsSub = wsService.watchBroadcastMessages(conversationId).listen((msg) {
+        addMessages([msg]);
+        store.addMessageSilently(msg);
+      });
+
+      // 5. Listen to Supabase Postgres CDC stream (if enabled)
+      final repoSub = repo.watchMessages(conversationId).listen(
+        (msgs) => addMessages(msgs),
+        onError: (_) {},
+      );
+
+      // 6. Polling timer every 2 seconds while chat is active to guarantee 100% synchronization
+      final pollTimer = Timer.periodic(const Duration(milliseconds: 2000), (_) {
+        fetchRemote();
+      });
+
+      ref.onDispose(() {
+        pollTimer.cancel();
+        storeSub.cancel();
+        wsSub.cancel();
+        repoSub.cancel();
+        controller.close();
+      });
+
+      return controller.stream;
     });
 
 /// Stream of ephemeral typing indicators over WebSockets.
@@ -368,7 +411,32 @@ class MessagingActions {
 
     final isAdmin = conversationId.contains('admin_support');
     if (isAdmin) {
-      return _store.sendMessage(
+      final msg = await _store.sendMessage(
+        conversationId: conversationId,
+        senderId: senderId,
+        senderName: senderName,
+        senderRole: senderRole,
+        text: text,
+        attachmentUrl: attachmentUrl,
+        attachmentType: attachmentType,
+      );
+      _wsService.broadcastMessage(conversationId: conversationId, message: msg);
+      return msg;
+    }
+
+    ChatMessage result;
+    try {
+      result = await _repo.sendMessage(
+        conversationId: conversationId,
+        senderId: senderId,
+        senderName: senderName,
+        senderRole: senderRole,
+        text: text,
+        attachmentUrl: attachmentUrl,
+        attachmentType: attachmentType,
+      );
+    } catch (_) {
+      result = await _store.sendMessage(
         conversationId: conversationId,
         senderId: senderId,
         senderName: senderName,
@@ -379,27 +447,16 @@ class MessagingActions {
       );
     }
 
-    try {
-      return await _repo.sendMessage(
-        conversationId: conversationId,
-        senderId: senderId,
-        senderName: senderName,
-        senderRole: senderRole,
-        text: text,
-        attachmentUrl: attachmentUrl,
-        attachmentType: attachmentType,
-      );
-    } catch (_) {
-      return _store.sendMessage(
-        conversationId: conversationId,
-        senderId: senderId,
-        senderName: senderName,
-        senderRole: senderRole,
-        text: text,
-        attachmentUrl: attachmentUrl,
-        attachmentType: attachmentType,
-      );
-    }
+    // Immediately record in local store so sender sees it without delay
+    _store.addMessage(result);
+
+    // Broadcast over WebSocket so counterpart receives it in real time
+    _wsService.broadcastMessage(
+      conversationId: conversationId,
+      message: result,
+    );
+
+    return result;
   }
 
   Future<void> sendTyping({
