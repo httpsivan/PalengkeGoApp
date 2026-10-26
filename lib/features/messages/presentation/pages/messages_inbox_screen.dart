@@ -441,14 +441,10 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
     List<ChatConversation> rawConversations,
     bool isVendor,
   ) {
-    // Include admin support in message history once chatting has started.
-    final store = ref.watch(sharedMessagingStoreProvider);
-    final allConversations = rawConversations.where((c) {
-      if (c.isAdminSupport) {
-        return store.hasStartedChatting(c.id);
-      }
-      return true;
-    }).toList();
+    // Customer and Admin messages are strictly separate.
+    // Admin support is accessed exclusively via the header button (top right).
+    final allConversations =
+        rawConversations.where((c) => !c.isAdminSupport).toList();
 
     // 1. Filter counts
     final allCount = allConversations.length;

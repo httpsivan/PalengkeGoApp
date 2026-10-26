@@ -62,25 +62,17 @@ final vendorConversationsProvider =
             (stallId == 'stall holder-001' || stallId == 'vendor-001')
                 ? 'v1'
                 : stallId;
-        // Include admin support conversation once chatting has started.
+        // Exclude admin support; admin chat is accessed exclusively via the header button.
         final localConvs = store.conversations.where(
           (c) {
-            if (c.isAdminSupport) {
-              return store.hasStartedChatting(c.id);
-            }
+            if (c.isAdminSupport) return false;
             return c.stallId == stallId ||
                 c.stallId == normalizedStallId ||
                 (normalizedStallId.isEmpty &&
                     (c.stallId == 'v1' || c.stallId == 'vendor-001'));
           },
         );
-        final result = repoList.where((c) {
-          if (c.isAdminSupport) {
-            return c.lastMessageText.trim().isNotEmpty ||
-                store.hasStartedChatting(c.id);
-          }
-          return true;
-        }).toList();
+        final result = repoList.where((c) => !c.isAdminSupport).toList();
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -146,23 +138,15 @@ final customerConversationsProvider =
       List<ChatConversation> repoList = [];
 
       List<ChatConversation> buildMerged() {
-        // Include admin support conversation once chatting has started.
+        // Exclude admin support; admin chat is accessed exclusively via the header button.
         final localConvs = store.conversations.where(
           (c) {
-            if (c.isAdminSupport) {
-              return store.hasStartedChatting(c.id);
-            }
+            if (c.isAdminSupport) return false;
             return c.customerUid == customerUid ||
                 c.customerUid == 'customer-001';
           },
         );
-        final result = repoList.where((c) {
-          if (c.isAdminSupport) {
-            return c.lastMessageText.trim().isNotEmpty ||
-                store.hasStartedChatting(c.id);
-          }
-          return true;
-        }).toList();
+        final result = repoList.where((c) => !c.isAdminSupport).toList();
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
