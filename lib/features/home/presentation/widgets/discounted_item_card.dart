@@ -24,11 +24,11 @@ class DiscountedItemCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final formatCurrency = NumberFormat.currency(symbol: '₱', decimalDigits: 0);
     final vendorAsync = ref.watch(vendorProfileProvider(product.vendorId));
-    final schedules = ref.watch(marketSchedulesProvider).value;
+    final schedules = ref.watch(marketSchedulesProvider).asData?.value;
     final schedule = schedules == null
         ? null
         : findOperatingSchedule(schedules, product.vendorId);
-    final now = ref.watch(closingClockProvider).value ?? DateTime.now();
+    final now = ref.watch(closingClockProvider).asData?.value ?? DateTime.now();
     final isLive = ref.watch(supabaseConfiguredProvider);
     final vendor = vendorAsync.value;
 

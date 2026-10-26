@@ -25,11 +25,11 @@ class _StallCardState extends ConsumerState<StallCard> {
     final rating = widget.vendor.rating.toStringAsFixed(1);
     final category = widget.vendor.category;
     final stallLocation = _stallLabelFor(widget.vendor);
-    final schedules = ref.watch(marketSchedulesProvider).value;
+    final schedules = ref.watch(marketSchedulesProvider).asData?.value;
     final schedule = schedules == null
         ? null
         : findOperatingSchedule(schedules, widget.vendor.id);
-    final now = ref.watch(closingClockProvider).value ?? DateTime.now();
+    final now = ref.watch(closingClockProvider).asData?.value ?? DateTime.now();
     final isLive = ref.watch(supabaseConfiguredProvider);
     final isOpen = schedule == null
         ? (!isLive && widget.vendor.isOpen)

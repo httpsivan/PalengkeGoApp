@@ -8,8 +8,12 @@ import 'package:palengkego/features/vendors/domain/closing_time.dart';
 
 // One shared read for visible stalls, refreshed with the existing market signal.
 final marketSchedulesProvider =
-    FutureProvider.autoDispose<Map<String, List<DaySchedule>>>((ref) async {
-      ref.watch(dataRefreshSignal);
+    FutureProvider<Map<String, List<DaySchedule>>>((ref) async {
+      // Listen to data refresh signal asynchronously so invalidation doesn't collide with in-flight builds.
+      ref.listen(dataRefreshSignal, (_, __) {
+        ref.invalidateSelf();
+      });
+
       final client = ref.watch(supabaseClientProvider);
       if (client == null) {
         final stall = ref.watch(vendorStallProvider);
@@ -37,9 +41,9 @@ final marketSchedulesProvider =
       return schedules;
     });
 
-final closingClockProvider = StreamProvider.autoDispose<DateTime>((ref) async* {
-  yield DateTime.now();
-  yield* Stream.periodic(const Duration(seconds: 15), (_) => DateTime.now());
+// Periodic clock tick without synchronous yield during initial subscription.
+final closingClockProvider = StreamProvider<DateTime>((ref) {
+  return Stream.periodic(const Duration(seconds: 15), (_) => DateTime.now());
 });
 
 class ClosingSoonNotice extends ConsumerWidget {
@@ -54,8 +58,8 @@ class ClosingSoonNotice extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!isOpen) return const SizedBox.shrink();
-    final schedules = ref.watch(marketSchedulesProvider).value;
-    final now = ref.watch(closingClockProvider).value ?? DateTime.now();
+    final schedules = ref.watch(marketSchedulesProvider).asData?.value;
+    final now = ref.watch(closingClockProvider).asData?.value ?? DateTime.now();
     final minutes = minutesUntilClosing(
       schedules?[vendorId] ?? [],
       now,
