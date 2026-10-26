@@ -76,7 +76,8 @@ final vendorConversationsProvider =
         );
         final result = repoList.where((c) {
           if (c.isAdminSupport) {
-            return store.hasStartedChatting(c.id);
+            return c.lastMessageText.trim().isNotEmpty ||
+                store.hasStartedChatting(c.id);
           }
           return true;
         }).toList();
@@ -157,7 +158,8 @@ final customerConversationsProvider =
         );
         final result = repoList.where((c) {
           if (c.isAdminSupport) {
-            return store.hasStartedChatting(c.id);
+            return c.lastMessageText.trim().isNotEmpty ||
+                store.hasStartedChatting(c.id);
           }
           return true;
         }).toList();

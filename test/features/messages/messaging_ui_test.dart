@@ -147,6 +147,8 @@ void main() {
       expect(find.text("Pedro's Fresh Catch"), findsOneWidget);
       expect(find.text('All (2)'), findsOneWidget);
       expect(find.text('Unread (1)'), findsOneWidget);
+      // Customers cannot message admin directly from inbox
+      expect(find.byKey(const Key('messages_admin_chat_button')), findsNothing);
     });
 
     testWidgets(

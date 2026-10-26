@@ -142,37 +142,28 @@ class SupabaseMessagingRepository implements MessagingRepository {
     String? relatedOrderId,
   }) async {
     try {
-      final row = await _client
-          .rpc(
-            'chat_get_or_create',
-            params: {
-              'p_stall_id': stallId,
-              'p_customer_uid': customerUid,
-              'p_inquiry_type': inquiryType,
-              'p_related_order_id': relatedOrderId,
-            },
-          )
-          .single();
-      return _mapConversation(Map<String, dynamic>.from(row));
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[SupabaseMessaging] chat_get_or_create rpc fallback to direct query: ');
-      }
-      final existing = await _client
+      var existing = await _client
           .from('conversations')
           .select()
           .eq('stall_id', stallId)
           .eq('customer_uid', customerUid)
           .maybeSingle();
 
+      if (existing == null && inquiryType == 'admin_support') {
+        existing = await _client
+            .from('conversations')
+            .select()
+            .eq('stall_id', customerUid)
+            .eq('customer_uid', stallId)
+            .maybeSingle();
+      }
+
       if (existing != null) {
         return _mapConversation(Map<String, dynamic>.from(existing));
       }
 
-      final convId = 'conv_' + stallId + '_' + customerUid;
       final now = DateTime.now().toIso8601String();
       final inserted = await _client.from('conversations').insert({
-        'id': convId,
         'stall_id': stallId,
         'stall_name': stallName,
         'stall_avatar': stallAvatar,
@@ -189,6 +180,11 @@ class SupabaseMessagingRepository implements MessagingRepository {
       }).select().single();
 
       return _mapConversation(Map<String, dynamic>.from(inserted));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[SupabaseMessaging] getOrCreateConversation error: $e');
+      }
+      rethrow;
     }
   }
 
@@ -203,28 +199,10 @@ class SupabaseMessagingRepository implements MessagingRepository {
     String? attachmentType,
   }) async {
     try {
-      final row = await _client
-          .rpc(
-            'chat_send_message',
-            params: {
-              'p_conversation_id': conversationId,
-              'p_text': text,
-              'p_attachment_url': attachmentUrl,
-              'p_attachment_type': attachmentType,
-            },
-          )
-          .single();
-      return _mapMessage(Map<String, dynamic>.from(row));
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[SupabaseMessaging] chat_send_message rpc fallback to direct insert: ');
-      }
       final now = DateTime.now();
       final nowIso = now.toIso8601String();
-      final msgId = 'msg_' + DateTime.now().millisecondsSinceEpoch.toString();
 
       final inserted = await _client.from('messages').insert({
-        'id': msgId,
         'conversation_id': conversationId,
         'sender_id': senderId,
         'sender_name': senderName,
@@ -245,6 +223,11 @@ class SupabaseMessagingRepository implements MessagingRepository {
       }).eq('id', conversationId);
 
       return _mapMessage(Map<String, dynamic>.from(inserted));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[SupabaseMessaging] sendMessage error: $e');
+      }
+      rethrow;
     }
   }
 
@@ -254,11 +237,6 @@ class SupabaseMessagingRepository implements MessagingRepository {
     required String readerRole,
   }) async {
     try {
-      await _client.rpc(
-        'chat_mark_read',
-        params: {'p_conversation_id': conversationId},
-      );
-    } catch (e) {
       final nowIso = DateTime.now().toIso8601String();
       await _client
           .from('messages')
@@ -270,6 +248,10 @@ class SupabaseMessagingRepository implements MessagingRepository {
         'customer_unread_count': 0,
         'vendor_unread_count': 0,
       }).eq('id', conversationId);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[SupabaseMessaging] markAsRead error: $e');
+      }
     }
   }
 
@@ -306,8 +288,8 @@ class SupabaseMessagingRepository implements MessagingRepository {
           ? DateTime.tryParse(row['last_message_timestamp'].toString()) ?? now
           : now,
       lastMessageSenderId: row['last_message_sender_id']?.toString() ?? '',
-      customerUnreadCount: (row['customer_unread_count'] as int?) ?? 0,
-      vendorUnreadCount: (row['vendor_unread_count'] as int?) ?? 0,
+      customerUnreadCount: (row['customer_unread_count'] as num?)?.toInt() ?? 0,
+      vendorUnreadCount: (row['vendor_unread_count'] as num?)?.toInt() ?? 0,
       inquiryType: row['inquiry_type']?.toString() ?? 'general',
       relatedOrderId: row['related_order_id']?.toString(),
       createdAt: row['created_at'] != null

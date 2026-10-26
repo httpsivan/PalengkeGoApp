@@ -10,6 +10,7 @@ import 'package:palengkego/features/messages/domain/chat_conversation.dart';
 import 'package:palengkego/features/messages/presentation/pages/chat_screen.dart';
 import 'package:palengkego/features/messages/presentation/widgets/conversation_card.dart';
 import 'package:palengkego/features/messages/presentation/widgets/messages_filter_chips.dart';
+import 'package:palengkego/features/vendors/application/is_vendor_approved_provider.dart';
 import 'package:palengkego/features/vendors/application/vendor_stall_provider.dart';
 
 class MessagesInboxScreen extends ConsumerStatefulWidget {
@@ -289,14 +290,19 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
               ],
             ),
           ),
-          // Direct Messaging to Admin Button (Replaces Notification Bell)
-          Consumer(
-            builder: (context, ref, _) {
-              final hasAdminUnread = ref
-                      .watch(adminHasUnreadProvider(isVendor))
-                      .asData
-                      ?.value ??
-                  false;
+          // Direct Messaging to Admin Button (Approved Stall Holders only)
+          if (isVendor)
+            Consumer(
+              builder: (context, ref, _) {
+                final isApproved =
+                    ref.watch(isVendorApprovedProvider).asData?.value ?? false;
+                if (!isApproved) return const SizedBox.shrink();
+
+                final hasAdminUnread = ref
+                        .watch(adminHasUnreadProvider(isVendor))
+                        .asData
+                        ?.value ??
+                    false;
 
               return Tooltip(
                 message: 'Message Admin Directly',
