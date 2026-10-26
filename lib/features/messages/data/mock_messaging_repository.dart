@@ -18,9 +18,7 @@ class MockMessagingRepository implements MessagingRepository {
     return _store.watchConversations().map((list) {
       return list
           .where((c) {
-            if (c.isAdminSupport) {
-              return _store.hasStartedChatting(c.id);
-            }
+            if (c.isAdminSupport) return false;
             return c.stallId == normalizedStallId ||
                 c.stallId == stallId ||
                 (normalizedStallId == 'v1' &&
@@ -38,9 +36,7 @@ class MockMessagingRepository implements MessagingRepository {
   ) {
     return _store.watchConversations().map((list) {
       return list.where((c) {
-        if (c.isAdminSupport) {
-          return _store.hasStartedChatting(c.id);
-        }
+        if (c.isAdminSupport) return false;
         return c.customerUid == customerUid;
       }).toList();
     });
@@ -62,9 +58,7 @@ class MockMessagingRepository implements MessagingRepository {
             : stallId;
     return _store.conversations
         .where((c) {
-          if (c.isAdminSupport) {
-            return _store.hasStartedChatting(c.id);
-          }
+          if (c.isAdminSupport) return false;
           return c.stallId == normalizedStallId ||
               c.stallId == stallId ||
               (normalizedStallId == 'v1' &&
@@ -82,9 +76,7 @@ class MockMessagingRepository implements MessagingRepository {
     await _store.load();
     return _store.conversations
         .where((c) {
-          if (c.isAdminSupport) {
-            return _store.hasStartedChatting(c.id);
-          }
+          if (c.isAdminSupport) return false;
           return c.customerUid == customerUid;
         })
         .toList();

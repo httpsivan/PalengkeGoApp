@@ -39,9 +39,11 @@ class ConversationCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final displayName = isVendorView
-        ? conversation.customerName
-        : conversation.stallName;
+    final displayName = conversation.isAdminSupport
+        ? 'PalengkeGo Admin'
+        : (isVendorView
+            ? conversation.customerName
+            : conversation.stallName);
     String? avatarUrl = isVendorView
         ? conversation.customerAvatar
         : conversation.stallAvatar;

@@ -72,15 +72,27 @@ class ChatMessage {
       'senderName': senderName,
       'senderRole': senderRole,
       'text': text,
-      'timestamp': timestamp.toIso8601String(),
+      'timestamp': timestamp.toUtc().toIso8601String(),
       'isRead': isRead,
-      'readAt': readAt?.toIso8601String(),
+      'readAt': readAt?.toUtc().toIso8601String(),
       if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
       if (attachmentType != null) 'attachmentType': attachmentType,
     };
   }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    DateTime parseLocal(dynamic val) {
+      if (val == null) return DateTime.now();
+      final parsed = DateTime.tryParse(val.toString());
+      return parsed != null ? parsed.toLocal() : DateTime.now();
+    }
+
+    DateTime? parseNullableLocal(dynamic val) {
+      if (val == null) return null;
+      final parsed = DateTime.tryParse(val.toString());
+      return parsed?.toLocal();
+    }
+
     return ChatMessage(
       id: json['id'] as String? ?? '',
       conversationId: json['conversationId'] as String? ?? '',
@@ -89,12 +101,10 @@ class ChatMessage {
       senderRole: json['senderRole'] as String? ?? 'customer',
       text: json['text'] as String? ?? '',
       timestamp: json['timestamp'] != null
-          ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
+          ? parseLocal(json['timestamp'])
           : DateTime.now(),
       isRead: json['isRead'] as bool? ?? false,
-      readAt: json['readAt'] != null
-          ? DateTime.tryParse(json['readAt'].toString())
-          : null,
+      readAt: parseNullableLocal(json['readAt']),
       attachmentUrl: json['attachmentUrl'] as String?,
       attachmentType: json['attachmentType'] as String?,
     );

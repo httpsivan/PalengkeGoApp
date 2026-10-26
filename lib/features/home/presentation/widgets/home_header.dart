@@ -10,6 +10,7 @@ import 'package:palengkego/features/notifications/presentation/pages/notificatio
 import 'package:palengkego/features/profile/application/profile_provider.dart';
 import 'package:palengkego/features/profile/presentation/pages/profile_screen.dart';
 import 'package:palengkego/features/auth/application/auth_provider.dart';
+import 'package:palengkego/features/auth/application/has_vendor_stall_provider.dart';
 import 'package:palengkego/features/auth/domain/app_user.dart';
 import 'package:palengkego/features/profile/application/preferences_provider.dart';
 import 'package:palengkego/features/home/presentation/widgets/location_selection_sheet.dart';
@@ -33,7 +34,8 @@ class HomeHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifService = ref.read(notificationServiceProvider);
     final user = ref.watch(authProvider);
-    final isVendorUser = user?.isVendor ?? false;
+    final hasVendorStall = ref.watch(hasVendorStallProvider);
+    final isVendorUser = (user?.isVendor ?? false) || hasVendorStall;
     final unreadMessagesCount = isVendorUser
         ? ref.watch(vendorUnreadMessagesCountProvider)
         : ref.watch(customerUnreadMessagesCountProvider);
@@ -182,7 +184,8 @@ class HomeHeader extends ConsumerWidget {
                   onSuccess: () {
                     if (context.mounted) {
                       final isVendor =
-                          ref.read(authProvider)?.isVendor ?? false;
+                          (ref.read(authProvider)?.isVendor ?? false) ||
+                          ref.read(hasVendorStallProvider);
                       Navigator.of(context).push(
                         PageTransitions.slideFromRight(
                           MessagesInboxScreen(
@@ -196,7 +199,8 @@ class HomeHeader extends ConsumerWidget {
                 );
                 return;
               }
-              final isVendor = currentUser.isVendor;
+              final isVendor =
+                  currentUser.isVendor || ref.read(hasVendorStallProvider);
               Navigator.of(context).push(
                 PageTransitions.slideFromRight(
                   MessagesInboxScreen(

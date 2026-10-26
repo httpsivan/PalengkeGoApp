@@ -4,6 +4,7 @@ import 'package:palengkego/core/presentation/widgets/adaptive_image.dart';
 import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/core/utils/page_transitions.dart';
 import 'package:palengkego/features/auth/application/auth_provider.dart';
+import 'package:palengkego/features/auth/application/has_vendor_stall_provider.dart';
 import 'package:palengkego/features/messages/application/messaging_provider.dart';
 import 'package:palengkego/features/messages/data/shared_messaging_store.dart';
 import 'package:palengkego/features/messages/domain/chat_conversation.dart';
@@ -126,7 +127,9 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider);
-    final isVendor = widget.isVendorView ?? (user?.isVendor ?? true);
+    final hasVendorStall = ref.watch(hasVendorStallProvider);
+    final isVendor =
+        widget.isVendorView ?? ((user?.isVendor ?? false) || hasVendorStall);
     final stall = ref.watch(vendorStallProvider);
     final headerAvatar = isVendor ? stall.avatarImage : null;
 
@@ -441,10 +444,82 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
     List<ChatConversation> rawConversations,
     bool isVendor,
   ) {
-    // Customer and Admin messages are strictly separate.
-    // Admin support is accessed exclusively via the header button (top right).
-    final allConversations =
-        rawConversations.where((c) => !c.isAdminSupport).toList();
+    final user = ref.watch(authProvider);
+    final stall = ref.watch(vendorStallProvider);
+    final store = ref.watch(sharedMessagingStoreProvider);
+    final selfUid = (user?.uid ?? '').trim();
+    final ownerUid = stall.ownerUid.trim();
+    final selfName = (user?.displayName ?? '').trim().toLowerCase();
+    final stallName = stall.name.trim().toLowerCase();
+    final stallId = stall.stallId.trim();
+
+    bool isSelfConversation(ChatConversation c) {
+      if (isVendor) {
+        final cUid = c.customerUid.trim();
+        final cName = c.customerName.trim().toLowerCase();
+        if (c.isAdminSupport) {
+          if (c.stallId == 'admin_support' &&
+              c.customerUid != 'admin_support' &&
+              c.id != 'conv_admin_support_channel') {
+            return true;
+          }
+          if (cName.isNotEmpty &&
+              ((selfName.isNotEmpty && cName == selfName) ||
+                  (stallName.isNotEmpty && cName == stallName))) {
+            return true;
+          }
+          return false;
+        }
+        if (cUid.isNotEmpty &&
+            ((selfUid.isNotEmpty && cUid == selfUid) ||
+                (ownerUid.isNotEmpty && cUid == ownerUid) ||
+                (stallId.isNotEmpty && cUid == stallId))) {
+          return true;
+        }
+        if (cName.isNotEmpty) {
+          if (selfName.isNotEmpty && cName == selfName) return true;
+          if (stallName.isNotEmpty && cName == stallName) return true;
+        }
+      } else {
+        final sId = c.stallId.trim();
+        final sName = c.stallName.trim().toLowerCase();
+        if (sId.isNotEmpty && selfUid.isNotEmpty && sId == selfUid) return true;
+        if (sName.isNotEmpty && selfName.isNotEmpty && sName == selfName) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    bool hasConversationStarted(ChatConversation c) {
+      final text = c.lastMessageText.trim();
+      final lower = text.toLowerCase();
+      final isWelcomeText =
+          lower.contains('how can the palengkego admin team help you') ||
+          text.contains('PalengkeGo Admin team help you today');
+      if (c.isAdminSupport) {
+        if (text.isNotEmpty &&
+            !isWelcomeText &&
+            lower != 'no messages yet' &&
+            lower != 'started a conversation') {
+          return true;
+        }
+        return store.hasStartedChatting(c.id);
+      }
+      return text.isNotEmpty || store.getMessages(c.id).isNotEmpty;
+    }
+
+    // Strictly exclude Admin Support from the customer message history list
+    // (Admin messages stay exclusively inside the Message Admin button),
+    // and only include customer conversations that have started.
+    final allConversations = rawConversations
+        .where(
+          (c) =>
+              !c.isAdminSupport &&
+              !isSelfConversation(c) &&
+              hasConversationStarted(c),
+        )
+        .toList();
 
     // 1. Filter counts
     final allCount = allConversations.length;
@@ -518,18 +593,23 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
                         conversation: conv,
                         isVendorView: isVendor,
                         onTap: () {
+                          final isAdmin = conv.isAdminSupport;
                           Navigator.of(context).push(
                             PageTransitions.slideFromRight(
                               ChatScreen(
                                 conversationId: conv.id,
-                                displayName: isVendor
-                                    ? conv.customerName
-                                    : conv.stallName,
+                                displayName: isAdmin
+                                    ? 'PalengkeGo Admin'
+                                    : (isVendor
+                                        ? conv.customerName
+                                        : conv.stallName),
                                 isVendorView: isVendor,
                                 stallId: conv.stallId,
-                                avatarUrl: isVendor
-                                    ? conv.customerAvatar
-                                    : conv.stallAvatar,
+                                avatarUrl: isAdmin
+                                    ? null
+                                    : (isVendor
+                                        ? conv.customerAvatar
+                                        : conv.stallAvatar),
                                 inquiryType: conv.inquiryType,
                                 relatedOrderId: conv.relatedOrderId,
                               ),

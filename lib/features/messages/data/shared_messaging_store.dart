@@ -128,14 +128,16 @@ class SharedMessagingStore {
         final List<dynamic> decodedConv = jsonDecode(conversationsJson);
         for (final item in decodedConv) {
           final conv = ChatConversation.fromJson(item as Map<String, dynamic>);
+          if (conv.customerUid.isNotEmpty && conv.customerUid == conv.stallId) {
+            continue;
+          }
           if (conv.isAdminSupport) {
-            _adminConversation ??= conv;
-            // Only show admin conversation in chat list if chatting has started
-            if (hasStartedChatting(conv.id)) {
-              if (!_conversations.any((c) => c.id == conv.id)) {
-                _conversations.add(conv);
-              }
-            }
+            _adminConversation ??= conv.copyWith(
+              stallName: 'PalengkeGo Admin',
+              customerName: 'PalengkeGo Admin',
+              stallAvatar: null,
+              customerAvatar: null,
+            );
           } else {
             if (!_conversations.any((c) => c.id == conv.id)) {
               _conversations.add(conv);
@@ -154,6 +156,8 @@ class SharedMessagingStore {
         // Admin profile must always have no photo, using default profile avatar
         if (_adminConversation != null) {
           _adminConversation = _adminConversation!.copyWith(
+            stallName: 'PalengkeGo Admin',
+            customerName: 'PalengkeGo Admin',
             stallAvatar: null,
             customerAvatar: null,
           );
@@ -665,7 +669,7 @@ class SharedMessagingStore {
       id: 'conv_customer_001_v2',
       stallId: 'v2',
       stallName: "Aling Nena's Fresh Gulay",
-      stallAvatar: 'assets/images/vendors/aling_nena_avatar.jpg',
+      stallAvatar: null,
       customerUid: 'customer-001',
       customerName: 'Maria Santos',
       lastMessageText: 'Opo Ma\'am Maria! Ready na po yung 2kg Ampalaya at Sitaw ninyo.',
@@ -707,7 +711,7 @@ class SharedMessagingStore {
       id: 'conv_customer_001_v3',
       stallId: 'v3',
       stallName: "Pedro's Fresh Catch",
-      stallAvatar: 'assets/images/vendors/mang_pedro_avatar.jpg',
+      stallAvatar: null,
       customerUid: 'customer-001',
       customerName: 'Maria Santos',
       lastMessageText: 'Salamat po! Bukas po ulit ng umaga.',
@@ -865,15 +869,15 @@ class SharedMessagingStore {
         id: adminConvId,
         stallId: 'admin_support',
         stallName: 'PalengkeGo Admin',
-        customerUid: customerUid == 'admin_support' ? 'vendor_user' : customerUid,
-        customerName: customerName.contains('Admin') ? 'You' : customerName,
+        customerUid: 'admin_support',
+        customerName: 'PalengkeGo Admin',
         customerAvatar: null,
         stallAvatar: null,
         lastMessageText: welcomeMsg.text,
         lastMessageTimestamp: now,
         lastMessageSenderId: 'admin_support',
-        vendorUnreadCount: 1,
-        customerUnreadCount: 1,
+        vendorUnreadCount: 0,
+        customerUnreadCount: 0,
         inquiryType: 'admin_support',
         createdAt: now,
         updatedAt: now,
@@ -969,17 +973,13 @@ class SharedMessagingStore {
         lastMessageSenderId: senderId,
         updatedAt: now,
       );
-      final adminIdx =
-          _conversations.indexWhere((c) => c.id == _adminConversation!.id);
-      if (adminIdx == -1) {
-        _conversations.insert(0, _adminConversation!);
-      } else {
-        _conversations[adminIdx] = _adminConversation!;
-      }
+      _conversations.removeWhere(
+        (c) => c.id == _adminConversation!.id || c.isAdminSupport,
+      );
     }
 
     final convIndex = _conversations.indexWhere((c) => c.id == conversationId);
-    if (convIndex != -1) {
+    if (convIndex != -1 && !_conversations[convIndex].isAdminSupport) {
       final existing = _conversations[convIndex];
       final isFromVendor = senderRole == 'vendor';
       final previewText = message.text.isNotEmpty
@@ -1033,9 +1033,41 @@ class SharedMessagingStore {
     }
   }
 
-  /// Registers or updates a conversation in the local store so it is immediately visible in the chat list.
+  void replaceMessages(String conversationId, List<ChatMessage> messages) {
+    _messages[conversationId] = List<ChatMessage>.from(messages);
+    if (messages.isNotEmpty) {
+      _updateConversationSummary(messages.last);
+    }
+    _notifyMessages(conversationId);
+    save();
+  }
+
+  /// Registers or updates a conversation in the local store so it is immediately visible in the chat list
+  /// once the conversation has started. Admin Support conversations are stored separately in [_adminConversation]
+  /// and never added to the customer conversation list.
   Future<void> registerConversation(ChatConversation conversation) async {
     await load();
+    if (conversation.isAdminSupport) {
+      final normalizedAdmin = conversation.copyWith(
+        stallName: 'PalengkeGo Admin',
+        customerName: 'PalengkeGo Admin',
+        stallAvatar: null,
+        customerAvatar: null,
+      );
+      _adminConversation = normalizedAdmin;
+      _conversations.removeWhere(
+        (c) => c.id == normalizedAdmin.id || c.isAdminSupport,
+      );
+      _notifyConversations();
+      await save();
+      return;
+    }
+
+    if (conversation.lastMessageText.trim().isEmpty &&
+        !hasStartedChatting(conversation.id)) {
+      return;
+    }
+
     final index = _conversations.indexWhere((c) => c.id == conversation.id);
     if (index == -1) {
       _conversations.insert(0, conversation);
@@ -1047,12 +1079,39 @@ class SharedMessagingStore {
   }
 
   void _updateConversationSummary(ChatMessage message) {
-    final convIndex = _conversations.indexWhere((c) => c.id == message.conversationId);
     final previewText = message.text.isNotEmpty
         ? message.text
         : (message.attachmentUrl != null ? '📷 Photo' : '');
+
+    final isFromAdmin = message.senderRole == 'admin';
+    if (isFromAdmin ||
+        (_adminConversation != null &&
+            (message.conversationId == _adminConversation!.id ||
+                message.conversationId.contains('admin_support')))) {
+      if (_adminConversation != null) {
+        _adminConversation = _adminConversation!.copyWith(
+          lastMessageText: previewText,
+          lastMessageTimestamp: message.timestamp,
+          lastMessageSenderId: message.senderId,
+          updatedAt: message.timestamp,
+        );
+      }
+      _conversations.removeWhere(
+        (c) =>
+            c.id == message.conversationId ||
+            c.id == _adminConversation?.id ||
+            c.isAdminSupport,
+      );
+      return;
+    }
+
+    final convIndex = _conversations.indexWhere((c) => c.id == message.conversationId);
     if (convIndex != -1) {
       final existing = _conversations[convIndex];
+      if (existing.isAdminSupport) {
+        _conversations.removeAt(convIndex);
+        return;
+      }
       final updated = existing.copyWith(
         lastMessageText: previewText,
         lastMessageTimestamp: message.timestamp,
@@ -1068,7 +1127,8 @@ class SharedMessagingStore {
         ChatConversation(
           id: message.conversationId,
           stallId: isFromCustomer ? 'v1' : message.senderId,
-          stallName: isFromCustomer ? 'PalengkeGo Stall Holder' : message.senderName,
+          stallName:
+              isFromCustomer ? 'PalengkeGo Stall Holder' : message.senderName,
           customerUid: isFromCustomer ? message.senderId : 'customer-001',
           customerName: isFromCustomer ? message.senderName : 'Customer',
           lastMessageText: previewText,
@@ -1076,6 +1136,7 @@ class SharedMessagingStore {
           lastMessageSenderId: message.senderId,
           vendorUnreadCount: isFromCustomer ? 1 : 0,
           customerUnreadCount: isFromCustomer ? 0 : 1,
+          inquiryType: 'general',
           createdAt: message.timestamp,
           updatedAt: message.timestamp,
         ),

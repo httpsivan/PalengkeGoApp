@@ -162,7 +162,7 @@ class SupabaseMessagingRepository implements MessagingRepository {
         return _mapConversation(Map<String, dynamic>.from(existing));
       }
 
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final inserted = await _client.from('conversations').insert({
         'stall_id': stallId,
         'stall_name': stallName,
@@ -199,10 +199,10 @@ class SupabaseMessagingRepository implements MessagingRepository {
     String? attachmentType,
   }) async {
     try {
-      final now = DateTime.now();
+      final now = DateTime.now().toUtc();
       final nowIso = now.toIso8601String();
 
-      final inserted = await _client.from('messages').insert({
+      final payload = <String, dynamic>{
         'conversation_id': conversationId,
         'sender_id': senderId,
         'sender_name': senderName,
@@ -210,15 +210,21 @@ class SupabaseMessagingRepository implements MessagingRepository {
         'text': text.trim(),
         'timestamp': nowIso,
         'is_read': false,
-        if (attachmentUrl != null) 'attachment_url': attachmentUrl,
-        if (attachmentType != null) 'attachment_type': attachmentType,
-      }).select().single();
+      };
+      if (attachmentUrl != null) payload['attachment_url'] = attachmentUrl;
+      if (attachmentType != null) payload['attachment_type'] = attachmentType;
 
+      final inserted = await _client.from('messages').insert(payload).select().single();
+
+      final isVendor = senderRole == 'vendor';
+      final previewText = text.trim().isNotEmpty
+          ? text.trim()
+          : (attachmentUrl != null ? '📷 Photo' : '');
       await _client.from('conversations').update({
-        'last_message_text': text.trim(),
+        'last_message_text': previewText,
         'last_message_timestamp': nowIso,
         'last_message_sender_id': senderId,
-        'admin_unread_count': 1,
+        if (isVendor) 'customer_unread_count': 1 else 'vendor_unread_count': 1,
         'updated_at': nowIso,
       }).eq('id', conversationId);
 
@@ -237,7 +243,7 @@ class SupabaseMessagingRepository implements MessagingRepository {
     required String readerRole,
   }) async {
     try {
-      final nowIso = DateTime.now().toIso8601String();
+      final nowIso = DateTime.now().toUtc().toIso8601String();
       await _client
           .from('messages')
           .update({'is_read': true, 'read_at': nowIso})
@@ -275,6 +281,12 @@ class SupabaseMessagingRepository implements MessagingRepository {
 
   ChatConversation _mapConversation(Map<String, dynamic> row) {
     final now = DateTime.now();
+    DateTime parseLocal(dynamic val) {
+      if (val == null) return now;
+      final dt = DateTime.tryParse(val.toString());
+      return dt != null ? dt.toLocal() : now;
+    }
+
     return ChatConversation(
       id: row['id']?.toString() ?? '',
       stallId: row['stall_id']?.toString() ?? '',
@@ -284,20 +296,14 @@ class SupabaseMessagingRepository implements MessagingRepository {
       customerName: row['customer_name']?.toString() ?? '',
       customerAvatar: row['customer_avatar']?.toString(),
       lastMessageText: row['last_message_text']?.toString() ?? '',
-      lastMessageTimestamp: row['last_message_timestamp'] != null
-          ? DateTime.tryParse(row['last_message_timestamp'].toString()) ?? now
-          : now,
+      lastMessageTimestamp: parseLocal(row['last_message_timestamp']),
       lastMessageSenderId: row['last_message_sender_id']?.toString() ?? '',
       customerUnreadCount: (row['customer_unread_count'] as num?)?.toInt() ?? 0,
       vendorUnreadCount: (row['vendor_unread_count'] as num?)?.toInt() ?? 0,
       inquiryType: row['inquiry_type']?.toString() ?? 'general',
       relatedOrderId: row['related_order_id']?.toString(),
-      createdAt: row['created_at'] != null
-          ? DateTime.tryParse(row['created_at'].toString()) ?? now
-          : now,
-      updatedAt: row['updated_at'] != null
-          ? DateTime.tryParse(row['updated_at'].toString()) ?? now
-          : now,
+      createdAt: parseLocal(row['created_at']),
+      updatedAt: parseLocal(row['updated_at']),
     );
   }
 
@@ -319,6 +325,12 @@ class SupabaseMessagingRepository implements MessagingRepository {
 
   ChatMessage _mapMessage(Map<String, dynamic> row) {
     final now = DateTime.now();
+    DateTime parseLocal(dynamic val) {
+      if (val == null) return now;
+      final dt = DateTime.tryParse(val.toString());
+      return dt != null ? dt.toLocal() : now;
+    }
+
     return ChatMessage(
       id: row['id']?.toString() ?? '',
       conversationId: row['conversation_id']?.toString() ?? '',
@@ -326,12 +338,10 @@ class SupabaseMessagingRepository implements MessagingRepository {
       senderName: row['sender_name']?.toString() ?? '',
       senderRole: row['sender_role']?.toString() ?? 'customer',
       text: row['text']?.toString() ?? '',
-      timestamp: row['timestamp'] != null
-          ? DateTime.tryParse(row['timestamp'].toString()) ?? now
-          : now,
+      timestamp: parseLocal(row['timestamp']),
       isRead: row['is_read'] == true,
       readAt: row['read_at'] != null
-          ? DateTime.tryParse(row['read_at'].toString())
+          ? DateTime.tryParse(row['read_at'].toString())?.toLocal()
           : null,
       attachmentUrl: row['attachment_url']?.toString(),
       attachmentType: row['attachment_type']?.toString(),

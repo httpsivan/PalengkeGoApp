@@ -505,55 +505,46 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (index == 0) return true;
 
     final previous = messages[index - 1];
-    // Start date and time header when chatting starts after the welcome message
+    // Start date header when chatting starts after the welcome message
     if (_isWelcomeMessage(previous)) return true;
 
     final currentDt = current.timestamp.toLocal();
     final previousDt = previous.timestamp.toLocal();
 
-    final isDifferentDay = currentDt.year != previousDt.year ||
+    return currentDt.year != previousDt.year ||
         currentDt.month != previousDt.month ||
         currentDt.day != previousDt.day;
-    if (isDifferentDay) return true;
-
-    return currentDt.difference(previousDt).inMinutes.abs() >= 15;
   }
 
   String _formatMessengerTimestamp(DateTime dt) {
     final local = dt.toLocal();
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(local.year, local.month, local.day);
-    final diffDays = today.difference(messageDate).inDays;
-    final timePart = DateFormat('h:mm a').format(local);
-
-    if (diffDays == 0) {
-      return 'TODAY, ${DateFormat('MMM d').format(local).toUpperCase()} AT $timePart';
-    } else if (diffDays == 1) {
-      return 'YESTERDAY, ${DateFormat('MMM d').format(local).toUpperCase()} AT $timePart';
-    } else if (local.year == now.year) {
-      return '${DateFormat('EEE, MMM d').format(local).toUpperCase()} AT $timePart';
-    } else {
-      return '${DateFormat('MMM d, yyyy').format(local).toUpperCase()} AT $timePart';
+    if (local.year == now.year && local.month == now.month && local.day == now.day) {
+      return 'Today • ${DateFormat('MMM d, yyyy').format(local)}';
     }
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (local.year == yesterday.year && local.month == yesterday.month && local.day == yesterday.day) {
+      return 'Yesterday • ${DateFormat('MMM d, yyyy').format(local)}';
+    }
+    return DateFormat('EEE, MMM d, yyyy').format(local);
   }
 
   Widget _buildDateHeader(DateTime timestamp) {
     return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
           decoration: BoxDecoration(
             color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: Text(
             _formatMessengerTimestamp(timestamp),
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
               color: Color(0xFF64748B),
             ),
           ),

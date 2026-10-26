@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:palengkego/core/config/app_config.dart';
-import 'package:palengkego/core/infrastructure/firebase_service.dart';
 import 'package:palengkego/core/infrastructure/supabase_service.dart';
 import 'package:palengkego/features/auth/application/auth_provider.dart';
 import 'package:palengkego/features/messages/data/mock_messaging_repository.dart';
@@ -50,6 +48,7 @@ final vendorConversationsProvider =
     StreamProvider.autoDispose<List<ChatConversation>>((ref) {
       final repo = ref.watch(messagingRepositoryProvider);
       final store = ref.watch(sharedMessagingStoreProvider);
+      final user = ref.watch(authProvider);
       final stall = ref.watch(vendorStallProvider);
       final currentVendorId = ref.watch(currentVendorIdProvider);
       final stallId = currentVendorId ?? stall.stallId;
@@ -57,22 +56,88 @@ final vendorConversationsProvider =
       final controller = StreamController<List<ChatConversation>>();
       List<ChatConversation> repoList = [];
 
+      bool isSelfConversation(ChatConversation c) {
+        final cUid = c.customerUid.trim();
+        final cName = c.customerName.trim().toLowerCase();
+        final selfUid = (user?.uid ?? '').trim();
+        final ownerUid = stall.ownerUid.trim();
+        final selfName = (user?.displayName ?? '').trim().toLowerCase();
+        final sName = stall.name.trim().toLowerCase();
+
+        if (c.isAdminSupport) {
+          // Exclude customer-side admin conversations (where stallId is admin_support and customer is the user themselves)
+          if (c.stallId == 'admin_support' &&
+              c.customerUid != 'admin_support' &&
+              c.id != 'conv_admin_support_channel') {
+            return true;
+          }
+          if (cName.isNotEmpty &&
+              ((selfName.isNotEmpty && cName == selfName) ||
+                  (sName.isNotEmpty && cName == sName))) {
+            return true;
+          }
+          return false;
+        }
+
+        if (cUid.isNotEmpty &&
+            (cUid == stallId ||
+                (selfUid.isNotEmpty && cUid == selfUid) ||
+                (ownerUid.isNotEmpty && cUid == ownerUid))) {
+          return true;
+        }
+        if (cName.isNotEmpty) {
+          if (selfName.isNotEmpty && cName == selfName) return true;
+          if (sName.isNotEmpty && cName == sName) return true;
+        }
+        return false;
+      }
+
+      bool hasConversationStarted(ChatConversation c) {
+        final text = c.lastMessageText.trim();
+        final lower = text.toLowerCase();
+        final isWelcomeText =
+            lower.contains('how can the palengkego admin team help you') ||
+            text.contains('PalengkeGo Admin team help you today');
+        if (c.isAdminSupport) {
+          if (text.isNotEmpty &&
+              !isWelcomeText &&
+              lower != 'no messages yet' &&
+              lower != 'started a conversation') {
+            return true;
+          }
+          return store.hasStartedChatting(c.id);
+        }
+        return text.isNotEmpty || store.getMessages(c.id).isNotEmpty;
+      }
+
       List<ChatConversation> buildMerged() {
         final normalizedStallId =
             (stallId == 'stall holder-001' || stallId == 'vendor-001')
                 ? 'v1'
                 : stallId;
-        // Exclude admin support; admin chat is accessed exclusively via the header button.
+        // Strictly exclude Admin Support from the customer messages history list;
+        // Admin Support is accessed exclusively via the dedicated Message Admin button.
         final localConvs = store.conversations.where(
           (c) {
-            if (c.isAdminSupport) return false;
+            if (c.isAdminSupport ||
+                isSelfConversation(c) ||
+                !hasConversationStarted(c)) {
+              return false;
+            }
             return c.stallId == stallId ||
                 c.stallId == normalizedStallId ||
                 (normalizedStallId.isEmpty &&
                     (c.stallId == 'v1' || c.stallId == 'vendor-001'));
           },
         );
-        final result = repoList.where((c) => !c.isAdminSupport).toList();
+        final result = repoList
+            .where(
+              (c) =>
+                  !c.isAdminSupport &&
+                  !isSelfConversation(c) &&
+                  hasConversationStarted(c),
+            )
+            .toList();
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -137,16 +202,37 @@ final customerConversationsProvider =
       final controller = StreamController<List<ChatConversation>>();
       List<ChatConversation> repoList = [];
 
+      bool hasConversationStarted(ChatConversation c) {
+        final text = c.lastMessageText.trim();
+        final lower = text.toLowerCase();
+        final isWelcomeText =
+            lower.contains('how can the palengkego admin team help you') ||
+            text.contains('PalengkeGo Admin team help you today');
+        if (c.isAdminSupport) {
+          if (text.isNotEmpty &&
+              !isWelcomeText &&
+              lower != 'no messages yet' &&
+              lower != 'started a conversation') {
+            return true;
+          }
+          return store.hasStartedChatting(c.id);
+        }
+        return text.isNotEmpty || store.getMessages(c.id).isNotEmpty;
+      }
+
       List<ChatConversation> buildMerged() {
-        // Exclude admin support; admin chat is accessed exclusively via the header button.
+        // Strictly exclude Admin Support from the customer messages history list;
+        // Admin Support is accessed exclusively via the dedicated Message Admin button.
         final localConvs = store.conversations.where(
           (c) {
-            if (c.isAdminSupport) return false;
+            if (c.isAdminSupport || !hasConversationStarted(c)) return false;
             return c.customerUid == customerUid ||
                 c.customerUid == 'customer-001';
           },
         );
-        final result = repoList.where((c) => !c.isAdminSupport).toList();
+        final result = repoList
+            .where((c) => !c.isAdminSupport && hasConversationStarted(c))
+            .toList();
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -202,8 +288,16 @@ final customerConversationsProvider =
 /// for the current vendor or customer, powering the unread badge on the "Message Admin Directly" button.
 final adminHasUnreadProvider =
     StreamProvider.autoDispose.family<bool, bool>((ref, isVendor) {
+      final repo = ref.watch(messagingRepositoryProvider);
       final store = ref.watch(sharedMessagingStoreProvider);
+      final user = ref.watch(authProvider);
+      final stall = ref.watch(vendorStallProvider);
+      final currentVendorId = ref.watch(currentVendorIdProvider);
+      final stallId = currentVendorId ?? stall.stallId;
+      final customerUid = user?.uid ?? 'customer-001';
+
       final controller = StreamController<bool>();
+      List<ChatConversation> repoList = [];
 
       bool checkUnread() {
         final adminConv = store.adminConversation;
@@ -213,21 +307,42 @@ final adminHasUnreadProvider =
               : adminConv.customerUnreadCount;
           if (count > 0) return true;
         }
+        final remoteHasUnread = repoList.any((c) {
+          if (!c.isAdminSupport) return false;
+          return isVendor ? c.vendorUnreadCount > 0 : c.customerUnreadCount > 0;
+        });
+        if (remoteHasUnread) return true;
         return store.conversations.any((c) {
           if (!c.isAdminSupport) return false;
           return isVendor ? c.vendorUnreadCount > 0 : c.customerUnreadCount > 0;
         });
       }
 
-      controller.add(checkUnread());
-
-      final sub = store.watchConversations().listen((_) {
+      void emit() {
         if (!controller.isClosed) {
           controller.add(checkUnread());
         }
+      }
+
+      emit();
+
+      final repoStream = isVendor
+          ? repo.watchConversationsForVendor(stallId)
+          : repo.watchConversationsForCustomer(customerUid);
+      final repoSub = repoStream.listen(
+        (list) {
+          repoList = list;
+          emit();
+        },
+        onError: (_) {},
+      );
+
+      final sub = store.watchConversations().listen((_) {
+        emit();
       });
 
       ref.onDispose(() {
+        repoSub.cancel();
         sub.cancel();
         controller.close();
       });
@@ -252,54 +367,60 @@ final conversationMessagesProvider = StreamProvider.autoDispose
         controller.add(list);
       }
 
-      void addMessages(Iterable<ChatMessage> msgs) {
-        bool changed = false;
-        for (final m in msgs) {
-          final existing = messageMap[m.id];
-          if (existing == null || existing.isRead != m.isRead || existing.text != m.text) {
-            messageMap[m.id] = m;
-            changed = true;
-          }
-        }
-        if (changed) {
-          emitMerged();
-        }
-      }
-
       // 1. Initial load from local store (instant display with 0ms delay)
       store.load().then((_) {
-        addMessages(store.getMessages(conversationId));
+        final local = store.getMessages(conversationId);
+        if (local.isNotEmpty && messageMap.isEmpty) {
+          for (final m in local) {
+            messageMap[m.id] = m;
+          }
+          emitMerged();
+        }
       });
 
       // 2. Fetch remote DB messages and update local store cache
       Future<void> fetchRemote() async {
         try {
           final remote = await repo.getMessages(conversationId);
-          if (remote.isNotEmpty) {
-            addMessages(remote);
-            for (final m in remote) {
-              store.addMessageSilently(m);
-            }
+          messageMap.clear();
+          for (final m in remote) {
+            messageMap[m.id] = m;
           }
+          emitMerged();
+          store.replaceMessages(conversationId, remote);
         } catch (_) {}
       }
 
       fetchRemote();
 
-      // 3. Listen to local store (fires instantly when local user sends message or marks read)
+      // 3. Listen to local store (fires instantly when local user sends message or marks read in mock mode)
       final storeSub = store.watchMessages(conversationId).listen((msgs) {
-        addMessages(msgs);
+        if (repo is MockMessagingRepository) {
+          messageMap.clear();
+          for (final m in msgs) {
+            messageMap[m.id] = m;
+          }
+          emitMerged();
+        }
       });
 
       // 4. Listen to WebSocket live broadcasts (fires instantly when counterpart sends message)
       final wsSub = wsService.watchBroadcastMessages(conversationId).listen((msg) {
-        addMessages([msg]);
+        messageMap[msg.id] = msg;
+        emitMerged();
         store.addMessageSilently(msg);
       });
 
       // 5. Listen to Supabase Postgres CDC stream (if enabled)
       final repoSub = repo.watchMessages(conversationId).listen(
-        (msgs) => addMessages(msgs),
+        (msgs) {
+          messageMap.clear();
+          for (final m in msgs) {
+            messageMap[m.id] = m;
+          }
+          emitMerged();
+          store.replaceMessages(conversationId, msgs);
+        },
         onError: (_) {},
       );
 

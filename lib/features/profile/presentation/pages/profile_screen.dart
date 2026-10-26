@@ -20,6 +20,8 @@ import 'security_settings_screen.dart';
 import 'saved_stalls_screen.dart';
 import 'help_support_screen.dart';
 import 'package:palengkego/features/checkout/presentation/pages/payment_methods_screen.dart';
+import 'package:palengkego/features/messages/application/messaging_provider.dart';
+import 'package:palengkego/features/messages/presentation/pages/messages_inbox_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -374,6 +376,48 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           },
                         ),
                         _buildMenuItem(
+                          iconData: Icons.chat_bubble_outline_rounded,
+                          title: 'Messages',
+                          trailingBadge: Consumer(
+                            builder: (context, ref, _) {
+                              final isVendorUser = isVendor || hasVendorStall;
+                              final unreadCount = isVendorUser
+                                  ? ref.watch(vendorUnreadMessagesCountProvider)
+                                  : ref.watch(customerUnreadMessagesCountProvider);
+                              if (unreadCount <= 0) return const SizedBox.shrink();
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$unreadCount',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          onTap: () {
+                            final isVendorUser = isVendor || hasVendorStall;
+                            Navigator.of(context).push(
+                              PageTransitions.slideFromRight(
+                                MessagesInboxScreen(
+                                  isEmbeddedInTab: false,
+                                  isVendorView: isVendorUser,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuItem(
                           iconData: Icons.location_on_outlined,
                           title: 'My Addresses',
                           onTap: () {
@@ -520,6 +564,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     String? iconPath,
     IconData? iconData,
     required String title,
+    Widget? trailingBadge,
     required VoidCallback onTap,
     bool isLogout = false,
   }) {
@@ -558,7 +603,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 size: 22,
                 color: isLogout
                     ? const Color(0xFFEF4444)
-                    : AppTheme.primaryGreen,
+                    : (trailingBadge != null
+                        ? const Color(0xFFD97706)
+                        : AppTheme.primaryGreen),
               ),
             const SizedBox(width: 16),
             Expanded(
@@ -573,6 +620,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
               ),
             ),
+            if (trailingBadge != null) ...[
+              trailingBadge,
+              const SizedBox(width: 8),
+            ],
             Icon(
               Icons.arrow_forward_ios_rounded,
               size: 14,

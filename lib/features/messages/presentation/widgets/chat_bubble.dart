@@ -121,97 +121,123 @@ class ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localTime = message.timestamp.toLocal();
-    // Display only time on chat bubble; section date headers handle calendar dates.
     final timeStr = DateFormat('h:mm a').format(localTime);
+    final isAdmin = message.senderRole == 'admin';
+    final roleLabel = isAdmin
+        ? 'PalengkeGo Admin'
+        : (message.senderName.trim().isNotEmpty
+            ? message.senderName.trim()
+            : (message.senderRole == 'vendor' ? 'Stall Holder' : 'Customer'));
 
-    // Initial greeting / welcome messages omit date & time until chatting starts.
-    final isWelcome = message.senderRole == 'admin' &&
+    final Color bg = isOutgoing
+        ? AppTheme.primaryGreen
+        : const Color(0xFFF0FDF4);
+    final Color fg = isOutgoing ? Colors.white : const Color(0xFF0F172A);
+    final Border? border = isOutgoing
+        ? null
+        : Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35));
+
+    final isWelcome = isAdmin &&
         (message.id.startsWith('msg_admin_welcome') ||
             message.text.toLowerCase().contains('how can the palengkego admin team help you') ||
             message.text.contains('PalengkeGo Admin team help you today'));
-    final shouldDisplayTime = showTimestamp && !isWelcome;
+    final shouldDisplayHeader = showTimestamp && !isWelcome;
 
     return Align(
       alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
         ),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: isOutgoing
-                ? AppTheme.primaryGreen
-                : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: Radius.circular(isOutgoing ? 16 : 4),
-              bottomRight: Radius.circular(isOutgoing ? 4 : 16),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
-              ),
-            ],
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          border: border,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(14),
+            topRight: const Radius.circular(14),
+            bottomLeft: Radius.circular(isOutgoing ? 14 : 2),
+            bottomRight: Radius.circular(isOutgoing ? 2 : 14),
           ),
-          child: Column(
-            crossAxisAlignment: isOutgoing
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Photo Attachment if present
-              if (message.hasAttachment) ...[
-                _buildAttachment(context),
-              ],
-              // Text Content if present
-              if (message.text.isNotEmpty) ...[
-                Text(
-                  message.text,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.35,
-                    color: isOutgoing
-                        ? Colors.white
-                        : const Color(0xFF0F172A),
-                  ),
-                ),
-                if (shouldDisplayTime) const SizedBox(height: 4),
-              ],
-              if (shouldDisplayTime)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment:
+              isOutgoing ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Top Row: Sender Info & Time
+            if (shouldDisplayHeader)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isOutgoing) ...[
+                    Flexible(
+                      child: Text(
+                        roleLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF065F46),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      timeStr,
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ] else ...[
                     Text(
                       timeStr,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w500,
-                        color: isOutgoing
-                            ? Colors.white.withValues(alpha: 0.7)
-                            : AppTheme.muted,
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
-                    if (isOutgoing) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        message.isRead
-                            ? Icons.done_all_rounded
-                            : Icons.done_rounded,
-                        size: 13,
-                        color: message.isRead
-                            ? const Color(0xFF6EE7B7)
-                            : Colors.white.withValues(alpha: 0.7),
-                      ),
-                    ],
+                    const SizedBox(width: 4),
+                    Icon(
+                      message.isRead
+                          ? Icons.done_all_rounded
+                          : Icons.done_rounded,
+                      size: 13,
+                      color: message.isRead
+                          ? const Color(0xFF6EE7B7)
+                          : Colors.white.withValues(alpha: 0.75),
+                    ),
                   ],
-                ),
+                ],
+              ),
+            if (shouldDisplayHeader) const SizedBox(height: 4),
+            // Photo Attachment if present
+            if (message.hasAttachment) ...[
+              _buildAttachment(context),
             ],
-          ),
+            // Text Content if present
+            if (message.text.isNotEmpty)
+              Text(
+                message.text,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  color: fg,
+                ),
+              ),
+          ],
         ),
       ),
     );
