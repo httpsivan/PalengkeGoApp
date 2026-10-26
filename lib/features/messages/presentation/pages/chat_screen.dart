@@ -162,8 +162,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final messagesAsync =
         ref.watch(conversationMessagesProvider(widget.conversationId));
 
-    String? effectiveAvatarUrl = widget.avatarUrl;
-    if (!widget.isVendorView) {
+    final isAdminChat = widget.inquiryType == 'admin_support' ||
+        widget.displayName.toLowerCase().contains('admin');
+    String? effectiveAvatarUrl = isAdminChat ? null : widget.avatarUrl;
+    if (!isAdminChat && !widget.isVendorView) {
       final stallLookupKey = (widget.stallId != null && widget.stallId!.trim().isNotEmpty)
           ? widget.stallId!.trim()
           : widget.displayName.trim();
@@ -285,6 +287,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           key: ValueKey('bubble_${message.id}'),
                           message: message,
                           isOutgoing: isOutgoing,
+                          showTimestamp: !_isWelcomeMessage(message),
                         ),
                       ],
                     );
@@ -391,7 +394,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       titleSpacing: 0,
       title: Row(
         children: [
-          if (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+          if (!isAdmin && avatarUrl != null && avatarUrl.trim().isNotEmpty)
             SizedBox(
               width: 36,
               height: 36,
@@ -487,17 +490,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  bool _shouldShowDateHeader(List<ChatMessage> messages, int index) {
-    if (index == 0) return true;
-    final current = messages[index].timestamp.toLocal();
-    final previous = messages[index - 1].timestamp.toLocal();
+  bool _isWelcomeMessage(ChatMessage message) {
+    return message.senderRole == 'admin' &&
+        (message.id.startsWith('msg_admin_welcome') ||
+            message.text.toLowerCase().contains('how can the palengkego admin team help you') ||
+            message.text.contains('PalengkeGo Admin team help you today'));
+  }
 
-    final isDifferentDay = current.year != previous.year ||
-        current.month != previous.month ||
-        current.day != previous.day;
+  bool _shouldShowDateHeader(List<ChatMessage> messages, int index) {
+    final current = messages[index];
+    // Do not show date header for the initial welcome greeting
+    if (_isWelcomeMessage(current)) return false;
+
+    if (index == 0) return true;
+
+    final previous = messages[index - 1];
+    // Start date and time header when chatting starts after the welcome message
+    if (_isWelcomeMessage(previous)) return true;
+
+    final currentDt = current.timestamp.toLocal();
+    final previousDt = previous.timestamp.toLocal();
+
+    final isDifferentDay = currentDt.year != previousDt.year ||
+        currentDt.month != previousDt.month ||
+        currentDt.day != previousDt.day;
     if (isDifferentDay) return true;
 
-    return current.difference(previous).inMinutes.abs() >= 15;
+    return currentDt.difference(previousDt).inMinutes.abs() >= 15;
   }
 
   String _formatMessengerTimestamp(DateTime dt) {

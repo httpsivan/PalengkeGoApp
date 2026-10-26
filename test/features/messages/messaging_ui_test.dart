@@ -181,6 +181,57 @@ void main() {
         expect(find.text('Direct Admin Support Channel'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'excludes PalengkeGo Admin conversation from inbox history list and accesses it via header button',
+      (tester) async {
+        // Create an admin conversation with welcome message history
+        await messagingStore.getOrCreateConversation(
+          customerUid: 'admin_support',
+          customerName: 'PalengkeGo Admin',
+          stallId: 'v1',
+          stallName: "Mer's Mayao Fruit Stand",
+          inquiryType: 'admin_support',
+        );
+
+        // Also add customer conversations
+        await messagingStore.getOrCreateConversation(
+          customerUid: 'cust_ivan',
+          customerName: 'Ivan Navarro',
+          stallId: 'v1',
+          stallName: "Mer's Mayao Fruit Stand",
+          inquiryType: 'product',
+        );
+
+        await tester.pumpWidget(
+          wrap(
+            const MessagesInboxScreen(
+              isEmbeddedInTab: false,
+              isVendorView: true,
+            ),
+            user: MockUsers.vendor,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // The vendor message history list MUST contain the customer, but NOT PalengkeGo Admin card
+        expect(find.text('Ivan Navarro'), findsOneWidget);
+        expect(find.text('Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.'), findsNothing);
+
+        // Tap the headset icon to access Admin chat directly
+        final adminButton = find.byKey(const Key('messages_admin_chat_button'));
+        expect(adminButton, findsOneWidget);
+        await tester.tap(adminButton);
+        await tester.pumpAndSettle();
+
+        // Inside Admin ChatScreen, PalengkeGo Admin and its message history appear
+        expect(find.text('PalengkeGo Admin'), findsOneWidget);
+        expect(find.text('Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.'), findsOneWidget);
+
+        // Admin profile must use default profile (Icons.support_agent_rounded), not a picture
+        expect(find.byIcon(Icons.support_agent_rounded), findsWidgets);
+      },
+    );
   });
 
   group('Customer HomeHeader Messages Icon', () {
@@ -343,6 +394,109 @@ void main() {
 
       expect(find.text('3:43 PM'), findsOneWidget);
       expect(find.textContaining('Oct 25'), findsNothing);
+    });
+
+    testWidgets(
+        'ChatBubble omits date and time for PalengkeGo Admin welcome greeting',
+        (tester) async {
+      final welcomeMsg = ChatMessage(
+        id: 'msg_admin_welcome_123',
+        conversationId: 'conv_admin_support_channel',
+        senderId: 'admin_support',
+        senderName: 'PalengkeGo Admin',
+        senderRole: 'admin',
+        text:
+            'Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.',
+        timestamp: DateTime(2026, 10, 25, 22, 25),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChatBubble(
+              message: welcomeMsg,
+              isOutgoing: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Welcome text is present
+      expect(
+        find.text(
+            'Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.'),
+        findsOneWidget,
+      );
+      // Date and time are omitted
+      expect(find.text('10:25 PM'), findsNothing);
+      expect(find.textContaining('Oct 25'), findsNothing);
+    });
+
+    testWidgets(
+        'ChatScreen omits date header for welcome message, starts date and time when user chats, and saves conversation',
+        (tester) async {
+      final store = SharedMessagingStore();
+      await store.load();
+
+      final adminConv = await store.getOrCreateConversation(
+        customerUid: 'customer-001',
+        customerName: 'Maria Santos',
+        stallId: 'admin_support',
+        stallName: 'PalengkeGo Admin',
+        inquiryType: 'admin_support',
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sharedMessagingStoreProvider.overrideWithValue(store),
+          ],
+          child: MaterialApp(
+            home: ChatScreen(
+              conversationId: adminConv.id,
+              displayName: 'PalengkeGo Admin',
+              isVendorView: false,
+              inquiryType: 'admin_support',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Welcome message is visible
+      expect(
+        find.text(
+            'Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.'),
+        findsOneWidget,
+      );
+
+      // Date badge header above welcome message is omitted
+      expect(find.textContaining('TODAY'), findsNothing);
+      expect(find.textContaining('AT'), findsNothing);
+
+      // Now user starts chatting
+      final inputField = find.byType(TextField);
+      expect(inputField, findsOneWidget);
+      await tester.enterText(inputField, 'Hello Admin, I need assistance');
+      await tester.pump();
+
+      final sendButton = find.byIcon(Icons.send_rounded);
+      expect(sendButton, findsOneWidget);
+      await tester.tap(sendButton);
+      await tester.pumpAndSettle();
+
+      // Allow automated admin reply 600ms timer to complete
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pumpAndSettle();
+
+      // Now date header starts because user started chatting
+      expect(find.textContaining('TODAY'), findsOneWidget);
+      expect(find.text('Hello Admin, I need assistance'), findsOneWidget);
+
+      // Verify conversation is saved and registered in store conversations list
+      expect(store.hasStartedChatting(adminConv.id), isTrue);
+      expect(store.conversations.any((c) => c.id == adminConv.id), isTrue);
     });
   });
 

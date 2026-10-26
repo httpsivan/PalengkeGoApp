@@ -38,6 +38,29 @@ class ChatConversation {
   bool hasUnreadForVendor() => vendorUnreadCount > 0;
   bool hasUnreadForCustomer() => customerUnreadCount > 0;
 
+  /// Returns whether this conversation is an Admin Support channel
+  /// (e.g. PalengkeGo Admin direct support) rather than a regular customer trade chat.
+  bool get isAdminSupport {
+    final inq = inquiryType.toLowerCase();
+    final cUid = customerUid.toLowerCase();
+    final sId = stallId.toLowerCase();
+    final cName = customerName.toLowerCase();
+    final sName = stallName.toLowerCase();
+    final convId = id.toLowerCase();
+    final senderId = lastMessageSenderId.toLowerCase();
+    final text = lastMessageText.toLowerCase();
+
+    return inq.contains('admin') ||
+        inq.contains('support') ||
+        cUid.contains('admin') ||
+        sId.contains('admin') ||
+        cName.contains('admin') ||
+        sName.contains('admin') ||
+        convId.contains('admin') ||
+        senderId.contains('admin') ||
+        text.contains('palengkego admin');
+  }
+
   ChatConversation copyWith({
     String? id,
     String? stallId,

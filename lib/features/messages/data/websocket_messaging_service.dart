@@ -20,6 +20,7 @@ class WebSocketMessagingService {
   final Map<String, Set<String>> _typingCurrentUsers = {};
   final Map<String, StreamController<ChatMessage>> _messageControllers = {};
   final Map<String, Timer> _reconnectTimers = {};
+  final Map<String, int> _reconnectAttempts = {};
 
   bool get isAvailable => _client != null;
 
@@ -109,15 +110,25 @@ class WebSocketMessagingService {
         _activeChannels.remove(conversationId);
 
         if (status == RealtimeSubscribeStatus.channelError) {
-          // Token expired or temporary network drop; auto-reconnect after backoff
-          _reconnectTimers[conversationId]?.cancel();
-          _reconnectTimers[conversationId] = Timer(const Duration(milliseconds: 1500), () {
-            if (_typingControllers.containsKey(conversationId) ||
-                _messageControllers.containsKey(conversationId)) {
-              subscribeToConversation(conversationId: conversationId);
-            }
-          });
+          final attempts = _reconnectAttempts[conversationId] ?? 0;
+          if (attempts < 3) {
+            _reconnectAttempts[conversationId] = attempts + 1;
+            final delayMs = 1500 * (attempts + 1);
+            _reconnectTimers[conversationId]?.cancel();
+            _reconnectTimers[conversationId] = Timer(Duration(milliseconds: delayMs), () {
+              if (_typingControllers.containsKey(conversationId) ||
+                  _messageControllers.containsKey(conversationId)) {
+                subscribeToConversation(
+                  conversationId: conversationId,
+                  onNewMessage: onNewMessage,
+                  onMessageUpdated: onMessageUpdated,
+                );
+              }
+            });
+          }
         }
+      } else if (status == RealtimeSubscribeStatus.subscribed) {
+        _reconnectAttempts[conversationId] = 0;
       }
     });
 

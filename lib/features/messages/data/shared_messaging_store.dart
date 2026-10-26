@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:palengkego/features/messages/domain/chat_conversation.dart';
 import 'package:palengkego/features/messages/domain/chat_message.dart';
 
@@ -19,6 +20,10 @@ class SharedMessagingStore {
 
   static const _conversationsKey = 'mock_chat_conversations_v1';
   static const _messagesKey = 'mock_chat_messages_v1';
+  static const _adminConversationKey = 'mock_admin_conversation_v1';
+
+  ChatConversation? _adminConversation;
+  ChatConversation? get adminConversation => _adminConversation;
 
   final _conversationsStreamController =
       StreamController<List<ChatConversation>>.broadcast();
@@ -34,6 +39,17 @@ class SharedMessagingStore {
 
   List<ChatMessage> getMessages(String conversationId) =>
       List.unmodifiable(_messages[conversationId] ?? []);
+
+  /// Checks whether a real conversation has started (user has sent messages beyond any initial greeting prompt).
+  bool hasStartedChatting(String conversationId) {
+    final msgs = _messages[conversationId];
+    if (msgs == null || msgs.isEmpty) return false;
+    return msgs.any((m) =>
+        m.senderRole != 'admin' ||
+        (!m.id.startsWith('msg_admin_welcome') &&
+            !m.text.toLowerCase().contains('how can the palengkego admin team help you') &&
+            !m.text.contains('PalengkeGo Admin team help you today')));
+  }
 
   Stream<List<ChatConversation>> watchConversations() {
     // Emit initial cached state immediately on listen
@@ -75,26 +91,30 @@ class SharedMessagingStore {
 
     String? conversationsJson;
     String? messagesJson;
+    String? adminConvJson;
     try {
       conversationsJson = await _storage.read(key: _conversationsKey);
       messagesJson = await _storage.read(key: _messagesKey);
+      adminConvJson = await _storage.read(key: _adminConversationKey);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('SharedMessagingStore: Secure storage unavailable: $e');
       }
     }
 
+    if (conversationsJson == null || messagesJson == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        conversationsJson ??= prefs.getString(_conversationsKey);
+        messagesJson ??= prefs.getString(_messagesKey);
+        adminConvJson ??= prefs.getString(_adminConversationKey);
+      } catch (_) {}
+    }
+
     if (conversationsJson != null && messagesJson != null) {
       _conversations.clear();
       _messages.clear();
       try {
-        final List<dynamic> decodedConv = jsonDecode(conversationsJson);
-        _conversations.addAll(
-          decodedConv.map(
-            (item) => ChatConversation.fromJson(item as Map<String, dynamic>),
-          ),
-        );
-
         final Map<String, dynamic> decodedMsgs = jsonDecode(messagesJson);
         decodedMsgs.forEach((convId, msgsList) {
           final list = msgsList as List<dynamic>;
@@ -105,11 +125,56 @@ class SharedMessagingStore {
               .toList();
         });
 
+        final List<dynamic> decodedConv = jsonDecode(conversationsJson);
+        for (final item in decodedConv) {
+          final conv = ChatConversation.fromJson(item as Map<String, dynamic>);
+          if (conv.isAdminSupport) {
+            _adminConversation ??= conv;
+            // Only show admin conversation in chat list if chatting has started
+            if (hasStartedChatting(conv.id)) {
+              if (!_conversations.any((c) => c.id == conv.id)) {
+                _conversations.add(conv);
+              }
+            }
+          } else {
+            if (!_conversations.any((c) => c.id == conv.id)) {
+              _conversations.add(conv);
+            }
+          }
+        }
+
+        if (adminConvJson != null) {
+          try {
+            _adminConversation = ChatConversation.fromJson(
+              jsonDecode(adminConvJson) as Map<String, dynamic>,
+            );
+          } catch (_) {}
+        }
+
+        // Admin profile must always have no photo, using default profile avatar
+        if (_adminConversation != null) {
+          _adminConversation = _adminConversation!.copyWith(
+            stallAvatar: null,
+            customerAvatar: null,
+          );
+          if (hasStartedChatting(_adminConversation!.id)) {
+            if (!_conversations.any((c) => c.id == _adminConversation!.id)) {
+              _conversations.insert(0, _adminConversation!);
+            }
+          }
+        }
+
+        // Ensure trade conversations are restored if empty
+        if (_conversations.isEmpty) {
+          _initDefaultData(preserveExistingMessages: true);
+        }
+
         _isLoaded = true;
         _notifyConversations();
         for (final id in _messages.keys) {
           _notifyMessages(id);
         }
+        await save();
         return;
       } catch (e) {
         if (kDebugMode) {
@@ -128,7 +193,14 @@ class SharedMessagingStore {
     await save();
   }
 
-  void _initDefaultData() {
+  void _initDefaultData({bool preserveExistingMessages = false}) {
+    Map<String, List<ChatMessage>>? savedMessages;
+    ChatConversation? savedAdmin;
+    if (preserveExistingMessages) {
+      savedMessages = Map.from(_messages);
+      savedAdmin = _adminConversation;
+    }
+
     _conversations.clear();
     _messages.clear();
 
@@ -670,6 +742,23 @@ class SharedMessagingStore {
         isRead: true,
       ),
     ];
+
+    if (preserveExistingMessages && savedMessages != null) {
+      savedMessages.forEach((k, v) {
+        if (v.isNotEmpty) {
+          _messages[k] = v;
+        }
+      });
+      final admin = savedAdmin;
+      if (admin != null) {
+        _adminConversation = admin;
+        if (hasStartedChatting(admin.id)) {
+          if (!_conversations.any((c) => c.id == admin.id)) {
+            _conversations.insert(0, admin);
+          }
+        }
+      }
+    }
   }
 
   Future<void> save() async {
@@ -686,7 +775,19 @@ class SharedMessagingStore {
 
   Future<void> _performSave() async {
     try {
-      final serializedConv = _conversations.map((c) => c.toJson()).toList();
+      final List<ChatConversation> toSaveConvs = [];
+      for (final c in _conversations) {
+        if (!toSaveConvs.any((x) => x.id == c.id)) {
+          toSaveConvs.add(c);
+        }
+      }
+      if (_adminConversation != null && hasStartedChatting(_adminConversation!.id)) {
+        if (!toSaveConvs.any((x) => x.id == _adminConversation!.id)) {
+          toSaveConvs.insert(0, _adminConversation!);
+        }
+      }
+
+      final serializedConv = toSaveConvs.map((c) => c.toJson()).toList();
       final convJson = jsonEncode(serializedConv);
 
       final Map<String, dynamic> serializedMsgs = _messages.map((key, value) {
@@ -696,6 +797,24 @@ class SharedMessagingStore {
 
       await _storage.write(key: _conversationsKey, value: convJson);
       await _storage.write(key: _messagesKey, value: msgsJson);
+      if (_adminConversation != null) {
+        await _storage.write(
+          key: _adminConversationKey,
+          value: jsonEncode(_adminConversation!.toJson()),
+        );
+      }
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_conversationsKey, convJson);
+        await prefs.setString(_messagesKey, msgsJson);
+        if (_adminConversation != null) {
+          await prefs.setString(
+            _adminConversationKey,
+            jsonEncode(_adminConversation!.toJson()),
+          );
+        }
+      } catch (_) {}
     } catch (e) {
       if (kDebugMode) {
         debugPrint('SharedMessagingStore: Error saving data: $e');
@@ -719,9 +838,55 @@ class SharedMessagingStore {
             ? 'v1'
             : stallId;
 
-    // Check existing conversation
+    // Handle Admin Support conversation separately so it NEVER enters the customer conversation list
+    final isAdminConversation = inquiryType == 'admin_support' ||
+        customerUid == 'admin_support' ||
+        normalizedStallId == 'admin_support';
+
+    if (isAdminConversation) {
+      if (_adminConversation != null) {
+        return _adminConversation!;
+      }
+      final now = DateTime.now();
+      const adminConvId = 'conv_admin_support_channel';
+      final welcomeMsg = ChatMessage(
+        id: 'msg_admin_welcome_${now.millisecondsSinceEpoch}',
+        conversationId: adminConvId,
+        senderId: 'admin_support',
+        senderName: 'PalengkeGo Admin',
+        senderRole: 'admin',
+        text:
+            'Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.',
+        timestamp: now,
+        isRead: false,
+      );
+      _messages[adminConvId] = [welcomeMsg];
+      _adminConversation = ChatConversation(
+        id: adminConvId,
+        stallId: 'admin_support',
+        stallName: 'PalengkeGo Admin',
+        customerUid: customerUid == 'admin_support' ? 'vendor_user' : customerUid,
+        customerName: customerName.contains('Admin') ? 'You' : customerName,
+        customerAvatar: null,
+        stallAvatar: null,
+        lastMessageText: welcomeMsg.text,
+        lastMessageTimestamp: now,
+        lastMessageSenderId: 'admin_support',
+        vendorUnreadCount: 1,
+        customerUnreadCount: 1,
+        inquiryType: 'admin_support',
+        createdAt: now,
+        updatedAt: now,
+      );
+      _notifyMessages(adminConvId);
+      await save();
+      return _adminConversation!;
+    }
+
+    // Check existing customer trade conversation
     final index = _conversations.indexWhere(
       (c) =>
+          !c.isAdminSupport &&
           c.customerUid == customerUid &&
           (c.stallId == normalizedStallId ||
               c.stallId == stallId ||
@@ -735,7 +900,7 @@ class SharedMessagingStore {
       return _conversations[index];
     }
 
-    // Create new conversation
+    // Create new customer trade conversation
     final now = DateTime.now();
     ChatConversation newConv = ChatConversation(
       id: 'conv_${customerUid}_$normalizedStallId',
@@ -755,35 +920,7 @@ class SharedMessagingStore {
       createdAt: now,
       updatedAt: now,
     );
-
-    final isAdminConversation = inquiryType == 'admin_support' ||
-        customerUid == 'admin_support' ||
-        normalizedStallId == 'admin_support';
-
-    if (isAdminConversation) {
-      final welcomeMsg = ChatMessage(
-        id: 'msg_admin_welcome_${now.millisecondsSinceEpoch}',
-        conversationId: newConv.id,
-        senderId: 'admin_support',
-        senderName: 'PalengkeGo Admin',
-        senderRole: 'admin',
-        text:
-            'Hello! How can the PalengkeGo Admin team help you today? Please feel free to leave any inquiries, reports, or support questions here.',
-        timestamp: now,
-        isRead: false,
-      );
-      _messages[newConv.id] = [welcomeMsg];
-      newConv = newConv.copyWith(
-        lastMessageText: welcomeMsg.text,
-        lastMessageTimestamp: now,
-        lastMessageSenderId: 'admin_support',
-        vendorUnreadCount: normalizedStallId != 'admin_support' ? 1 : 0,
-        customerUnreadCount: customerUid != 'admin_support' ? 1 : 0,
-      );
-    } else {
-      _messages[newConv.id] = [];
-    }
-
+    _messages[newConv.id] = [];
     _conversations.insert(0, newConv);
     _notifyConversations();
     _notifyMessages(newConv.id);
@@ -819,6 +956,28 @@ class SharedMessagingStore {
     msgs.add(message);
 
     // Update conversation record
+    final isToAdmin = conversationId == _adminConversation?.id ||
+        conversationId.contains('admin_support');
+
+    if (isToAdmin && _adminConversation != null) {
+      final previewText = message.text.isNotEmpty
+          ? message.text
+          : (message.attachmentUrl != null ? '📷 Photo' : '');
+      _adminConversation = _adminConversation!.copyWith(
+        lastMessageText: previewText,
+        lastMessageTimestamp: now,
+        lastMessageSenderId: senderId,
+        updatedAt: now,
+      );
+      final adminIdx =
+          _conversations.indexWhere((c) => c.id == _adminConversation!.id);
+      if (adminIdx == -1) {
+        _conversations.insert(0, _adminConversation!);
+      } else {
+        _conversations[adminIdx] = _adminConversation!;
+      }
+    }
+
     final convIndex = _conversations.indexWhere((c) => c.id == conversationId);
     if (convIndex != -1) {
       final existing = _conversations[convIndex];
@@ -844,45 +1003,6 @@ class SharedMessagingStore {
     _notifyMessages(conversationId);
     _notifyConversations();
     await save();
-
-    // If sent to admin support, schedule an automated acknowledgement so the user gets an instant reply
-    if (conversationId.contains('admin_support') && senderRole != 'admin') {
-      Future.delayed(const Duration(milliseconds: 600), () {
-        final replyTime = DateTime.now();
-        final adminReply = ChatMessage(
-          id: 'msg_admin_reply_${replyTime.millisecondsSinceEpoch}',
-          conversationId: conversationId,
-          senderId: 'admin_support',
-          senderName: 'PalengkeGo Admin',
-          senderRole: 'admin',
-          text:
-              'Thank you for reaching out! Our Admin Support team has received your message and will review it shortly.',
-          timestamp: replyTime,
-          isRead: false,
-        );
-        final currentMsgs = _messages.putIfAbsent(conversationId, () => []);
-        currentMsgs.add(adminReply);
-        final idx = _conversations.indexWhere((c) => c.id == conversationId);
-        if (idx != -1) {
-          _conversations[idx] = _conversations[idx].copyWith(
-            lastMessageText: adminReply.text,
-            lastMessageTimestamp: replyTime,
-            lastMessageSenderId: 'admin_support',
-            vendorUnreadCount: _conversations[idx].stallId != 'admin_support'
-                ? _conversations[idx].vendorUnreadCount + 1
-                : 0,
-            customerUnreadCount:
-                _conversations[idx].customerUid != 'admin_support'
-                    ? _conversations[idx].customerUnreadCount + 1
-                    : 0,
-            updatedAt: replyTime,
-          );
-        }
-        _notifyMessages(conversationId);
-        _notifyConversations();
-        save();
-      });
-    }
 
     return message;
   }
@@ -973,8 +1093,10 @@ class SharedMessagingStore {
       bool changed = false;
       final updatedMsgs = msgs.map((m) {
         if (!m.isRead &&
-            ((readerRole == 'vendor' && m.senderRole == 'customer') ||
-                (readerRole == 'customer' && m.senderRole == 'vendor'))) {
+            ((readerRole == 'vendor' &&
+                    (m.senderRole == 'customer' || m.senderRole == 'admin')) ||
+                (readerRole == 'customer' &&
+                    (m.senderRole == 'vendor' || m.senderRole == 'admin')))) {
           changed = true;
           return m.copyWith(isRead: true, readAt: DateTime.now());
         }
@@ -996,6 +1118,19 @@ class SharedMessagingStore {
             readerRole == 'customer' ? 0 : existing.customerUnreadCount,
       );
       _conversations[convIndex] = updated;
+      _notifyConversations();
+    }
+
+    final isToAdmin = conversationId == _adminConversation?.id ||
+        conversationId.contains('admin_support');
+    if (isToAdmin && _adminConversation != null) {
+      _adminConversation = _adminConversation!.copyWith(
+        vendorUnreadCount:
+            readerRole == 'vendor' ? 0 : _adminConversation!.vendorUnreadCount,
+        customerUnreadCount: readerRole == 'customer'
+            ? 0
+            : _adminConversation!.customerUnreadCount,
+      );
       _notifyConversations();
     }
 

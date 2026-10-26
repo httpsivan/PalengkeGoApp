@@ -66,14 +66,10 @@ class AppConfig {
           hasPaymongoKey,
       supabaseUrl: const String.fromEnvironment('SUPABASE_URL').isNotEmpty
           ? const String.fromEnvironment('SUPABASE_URL')
-          : (hasBackendFlag
-              ? 'https://jvpplxlcucuzmbtbmtah.supabase.co'
-              : ''),
+          : 'https://jvpplxlcucuzmbtbmtah.supabase.co',
       supabaseAnonKey: isAnonKeyValidJwt
           ? rawAnonKey
-          : (hasBackendFlag
-              ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2cHBseGxjdWN1em1idGJtdGFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMjIyNTUsImV4cCI6MjEwMjY5ODI1NX0.FrYvHhZjARj-XZNC1ZgxfVa1ixJQsuMTkRRMTxCamw0'
-              : ''),
+          : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2cHBseGxjdWN1em1idGJtdGFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxMjIyNTUsImV4cCI6MjEwMjY5ODI1NX0.FrYvHhZjARj-XZNC1ZgxfVa1ixJQsuMTkRRMTxCamw0',
       paymongoPublicKey: paymongoKey.isNotEmpty
           ? paymongoKey
           : 'pk_test_placeholder',

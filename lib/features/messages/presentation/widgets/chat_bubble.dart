@@ -7,11 +7,13 @@ import 'package:palengkego/features/messages/domain/chat_message.dart';
 class ChatBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isOutgoing;
+  final bool showTimestamp;
 
   const ChatBubble({
     super.key,
     required this.message,
     required this.isOutgoing,
+    this.showTimestamp = true,
   });
 
   Widget _errorPlaceholder() {
@@ -122,6 +124,13 @@ class ChatBubble extends StatelessWidget {
     // Display only time on chat bubble; section date headers handle calendar dates.
     final timeStr = DateFormat('h:mm a').format(localTime);
 
+    // Initial greeting / welcome messages omit date & time until chatting starts.
+    final isWelcome = message.senderRole == 'admin' &&
+        (message.id.startsWith('msg_admin_welcome') ||
+            message.text.toLowerCase().contains('how can the palengkego admin team help you') ||
+            message.text.contains('PalengkeGo Admin team help you today'));
+    final shouldDisplayTime = showTimestamp && !isWelcome;
+
     return Align(
       alignment: isOutgoing ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -171,35 +180,36 @@ class ChatBubble extends StatelessWidget {
                         : const Color(0xFF0F172A),
                   ),
                 ),
-                const SizedBox(height: 4),
+                if (shouldDisplayTime) const SizedBox(height: 4),
               ],
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    timeStr,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: isOutgoing
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : AppTheme.muted,
+              if (shouldDisplayTime)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      timeStr,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: isOutgoing
+                            ? Colors.white.withValues(alpha: 0.7)
+                            : AppTheme.muted,
+                      ),
                     ),
-                  ),
-                  if (isOutgoing) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      message.isRead
-                          ? Icons.done_all_rounded
-                          : Icons.done_rounded,
-                      size: 13,
-                      color: message.isRead
-                          ? const Color(0xFF6EE7B7)
-                          : Colors.white.withValues(alpha: 0.7),
-                    ),
+                    if (isOutgoing) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        message.isRead
+                            ? Icons.done_all_rounded
+                            : Icons.done_rounded,
+                        size: 13,
+                        color: message.isRead
+                            ? const Color(0xFF6EE7B7)
+                            : Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
             ],
           ),
         ),

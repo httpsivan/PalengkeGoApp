@@ -99,17 +99,24 @@ final vendorConversationsProvider =
             (stallId == 'stall holder-001' || stallId == 'vendor-001')
                 ? 'v1'
                 : stallId;
+        // Include admin support conversation once chatting has started.
         final localConvs = store.conversations.where(
-          (c) =>
-              c.stallId == stallId ||
-              c.stallId == normalizedStallId ||
-              (normalizedStallId.isEmpty &&
-                  (c.stallId == 'v1' || c.stallId == 'vendor-001')) ||
-              c.customerUid == 'admin_support' ||
-              c.stallId == 'admin_support' ||
-              c.inquiryType == 'admin_support',
+          (c) {
+            if (c.isAdminSupport) {
+              return store.hasStartedChatting(c.id);
+            }
+            return c.stallId == stallId ||
+                c.stallId == normalizedStallId ||
+                (normalizedStallId.isEmpty &&
+                    (c.stallId == 'v1' || c.stallId == 'vendor-001'));
+          },
         );
-        final result = List<ChatConversation>.from(repoList);
+        final result = repoList.where((c) {
+          if (c.isAdminSupport) {
+            return store.hasStartedChatting(c.id);
+          }
+          return true;
+        }).toList();
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -175,15 +182,22 @@ final customerConversationsProvider =
       List<ChatConversation> repoList = [];
 
       List<ChatConversation> buildMerged() {
+        // Include admin support conversation once chatting has started.
         final localConvs = store.conversations.where(
-          (c) =>
-              c.customerUid == customerUid ||
-              c.customerUid == 'customer-001' ||
-              c.inquiryType == 'admin_support' ||
-              c.stallId == 'admin_support' ||
-              c.customerUid == 'admin_support',
+          (c) {
+            if (c.isAdminSupport) {
+              return store.hasStartedChatting(c.id);
+            }
+            return c.customerUid == customerUid ||
+                c.customerUid == 'customer-001';
+          },
         );
-        final result = List<ChatConversation>.from(repoList);
+        final result = repoList.where((c) {
+          if (c.isAdminSupport) {
+            return store.hasStartedChatting(c.id);
+          }
+          return true;
+        }).toList();
         for (final localConv in localConvs) {
           final existingIdx = result.indexWhere((c) => c.id == localConv.id);
           if (existingIdx == -1) {
@@ -229,6 +243,43 @@ final customerConversationsProvider =
       ref.onDispose(() {
         repoSub.cancel();
         storeSub.cancel();
+        controller.close();
+      });
+
+      return controller.stream;
+    });
+
+/// Stream indicating whether there is an unread message in the admin support conversation
+/// for the current vendor or customer, powering the unread badge on the "Message Admin Directly" button.
+final adminHasUnreadProvider =
+    StreamProvider.autoDispose.family<bool, bool>((ref, isVendor) {
+      final store = ref.watch(sharedMessagingStoreProvider);
+      final controller = StreamController<bool>();
+
+      bool checkUnread() {
+        final adminConv = store.adminConversation;
+        if (adminConv != null) {
+          final count = isVendor
+              ? adminConv.vendorUnreadCount
+              : adminConv.customerUnreadCount;
+          if (count > 0) return true;
+        }
+        return store.conversations.any((c) {
+          if (!c.isAdminSupport) return false;
+          return isVendor ? c.vendorUnreadCount > 0 : c.customerUnreadCount > 0;
+        });
+      }
+
+      controller.add(checkUnread());
+
+      final sub = store.watchConversations().listen((_) {
+        if (!controller.isClosed) {
+          controller.add(checkUnread());
+        }
+      });
+
+      ref.onDispose(() {
+        sub.cancel();
         controller.close();
       });
 
@@ -381,23 +432,6 @@ class MessagingActions {
     String inquiryType = 'general',
     String? relatedOrderId,
   }) async {
-    final isAdmin = inquiryType == 'admin_support' ||
-        customerUid == 'admin_support' ||
-        stallId == 'admin_support';
-
-    if (isAdmin) {
-      return _store.getOrCreateConversation(
-        customerUid: customerUid,
-        customerName: customerName,
-        stallId: stallId,
-        stallName: stallName,
-        stallAvatar: stallAvatar,
-        customerAvatar: customerAvatar,
-        inquiryType: inquiryType,
-        relatedOrderId: relatedOrderId,
-      );
-    }
-
     try {
       final conv = await _repo.getOrCreateConversation(
         customerUid: customerUid,
@@ -442,21 +476,6 @@ class MessagingActions {
         isTyping: false,
       );
     } catch (_) {}
-
-    final isAdmin = conversationId.contains('admin_support');
-    if (isAdmin) {
-      final msg = await _store.sendMessage(
-        conversationId: conversationId,
-        senderId: senderId,
-        senderName: senderName,
-        senderRole: senderRole,
-        text: text,
-        attachmentUrl: attachmentUrl,
-        attachmentType: attachmentType,
-      );
-      _wsService.broadcastMessage(conversationId: conversationId, message: msg);
-      return msg;
-    }
 
     ChatMessage result;
     try {
@@ -509,12 +528,6 @@ class MessagingActions {
     required String conversationId,
     required String readerRole,
   }) async {
-    if (conversationId.contains('admin_support')) {
-      return _store.markAsRead(
-        conversationId: conversationId,
-        readerRole: readerRole,
-      );
-    }
     try {
       await _repo.markAsRead(
         conversationId: conversationId,

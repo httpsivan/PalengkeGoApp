@@ -55,10 +55,6 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
           (stall.stallId.isNotEmpty ? stall.stallId : 'v1');
       final stallName =
           stall.name.isNotEmpty ? stall.name : 'PalengkeGo Stall Holder';
-      final stallAvatar =
-          (stall.avatarImage != null && stall.avatarImage!.isNotEmpty)
-              ? stall.avatarImage
-              : stall.thumbnailImage;
 
       const adminId = 'admin_support';
       const adminName = 'PalengkeGo Admin';
@@ -73,7 +69,7 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
             customerName: adminName,
             stallId: stallId,
             stallName: stallName,
-            stallAvatar: stallAvatar,
+            stallAvatar: null,
             inquiryType: 'admin_support',
           );
         } else {
@@ -94,7 +90,7 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
           customerName: isVendor ? adminName : (user?.displayName ?? 'Customer'),
           stallId: isVendor ? stallId : adminId,
           stallName: isVendor ? stallName : adminName,
-          stallAvatar: isVendor ? stallAvatar : null,
+          stallAvatar: null,
           customerAvatar: isVendor ? null : user?.profilePhoto,
           inquiryType: 'admin_support',
         );
@@ -108,7 +104,7 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
             displayName: adminName,
             isVendorView: isVendor,
             stallId: isVendor ? stallId : adminId,
-            avatarUrl: conv.stallAvatar,
+            avatarUrl: null, // Default admin profile avatar
             inquiryType: 'admin_support',
             relatedOrderId: conv.relatedOrderId,
           ),
@@ -296,21 +292,11 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
           // Direct Messaging to Admin Button (Replaces Notification Bell)
           Consumer(
             builder: (context, ref, _) {
-              final conversationsAsync = isVendor
-                  ? ref.watch(vendorConversationsProvider)
-                  : ref.watch(customerConversationsProvider);
-              final hasAdminUnread = conversationsAsync.maybeWhen(
-                data: (convs) => convs.any(
-                  (c) =>
-                      (c.inquiryType == 'admin_support' ||
-                          c.customerUid == 'admin_support' ||
-                          c.stallId == 'admin_support') &&
-                      (isVendor
-                          ? c.vendorUnreadCount > 0
-                          : c.customerUnreadCount > 0),
-                ),
-                orElse: () => false,
-              );
+              final hasAdminUnread = ref
+                      .watch(adminHasUnreadProvider(isVendor))
+                      .asData
+                      ?.value ??
+                  false;
 
               return Tooltip(
                 message: 'Message Admin Directly',
@@ -446,9 +432,18 @@ class _MessagesInboxScreenState extends ConsumerState<MessagesInboxScreen> {
 
   Widget _buildConversationContent(
     BuildContext context,
-    List<ChatConversation> allConversations,
+    List<ChatConversation> rawConversations,
     bool isVendor,
   ) {
+    // Include admin support in message history once chatting has started.
+    final store = ref.watch(sharedMessagingStoreProvider);
+    final allConversations = rawConversations.where((c) {
+      if (c.isAdminSupport) {
+        return store.hasStartedChatting(c.id);
+      }
+      return true;
+    }).toList();
+
     // 1. Filter counts
     final allCount = allConversations.length;
     final unreadCount = allConversations
