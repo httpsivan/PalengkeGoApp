@@ -14,46 +14,9 @@ import 'package:palengkego/features/messages/domain/chat_message.dart';
 import 'package:palengkego/features/messages/domain/messaging_repository.dart';
 import 'package:palengkego/features/vendors/application/vendor_stall_provider.dart';
 
-/// Dedicated authenticated client: other app services keep their existing auth.
+/// Dedicated client for Supabase messaging.
 final messagingClientProvider = Provider<SupabaseClient?>((ref) {
-  final backend = ref.watch(supabaseClientProvider);
-  if (backend == null) return null;
-  final config = ref.watch(appConfigProvider);
-  final auth = ref.watch(firebaseAuthProvider);
-  final uid = ref.watch(authProvider)?.uid;
-  Future<FunctionResponse>? authSetup;
-  final client = SupabaseClient(
-    config.supabaseUrl,
-    config.supabaseAnonKey,
-    accessToken: () async {
-      final user = auth?.currentUser;
-      if (user == null || user.uid != uid) return null;
-
-      // Force refresh token if expired or about to expire within 3 minutes
-      var token = await user.getIdTokenResult();
-      final exp = token.expirationTime;
-      final isExpiredOrExpiringSoon = exp == null ||
-          exp.toUtc().isBefore(DateTime.now().toUtc().add(const Duration(minutes: 3)));
-
-      if (isExpiredOrExpiringSoon) {
-        await user.getIdToken(true);
-        token = await user.getIdTokenResult();
-      }
-
-      if (token.claims?['role'] == 'authenticated') return token.token;
-      try {
-        await (authSetup ??= backend.functions.invoke(
-          'chat-auth',
-          headers: {'Authorization': 'Bearer ${token.token}'},
-        ));
-      } catch (_) {
-        authSetup = null;
-      }
-      return user.getIdToken(true);
-    },
-  );
-  ref.onDispose(client.dispose);
-  return client;
+  return ref.watch(supabaseClientProvider);
 });
 
 /// Provider for managing persistent WebSocket channels and broadcast events.
