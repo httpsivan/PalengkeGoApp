@@ -1,10 +1,10 @@
-import 'package:palengkego/core/theme/app_theme.dart';
-import 'package:palengkego/core/navigation/app_routes.dart';
-import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:palengkego/core/navigation/app_routes.dart';
+import 'package:palengkego/core/theme/app_theme.dart';
 
-/// Bottom bar with the Register button (loading-aware) and a Log In link.
-class RegistrationBottomActionBar extends StatelessWidget {
+/// Bottom action section with the pill-shaped Register Account button
+/// and the "Already have an account? Log In" link, matching LoginScreen.
+class RegistrationBottomActionBar extends StatefulWidget {
   final bool isLoading;
   final VoidCallback onRegister;
 
@@ -15,125 +15,136 @@ class RegistrationBottomActionBar extends StatelessWidget {
   });
 
   @override
+  State<RegistrationBottomActionBar> createState() =>
+      _RegistrationBottomActionBarState();
+}
+
+class _RegistrationBottomActionBarState
+    extends State<RegistrationBottomActionBar> {
+  bool _btnPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
-        border: const Border(
-          top: BorderSide(color: AppTheme.surfaceContainerLow, width: 1),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Listener(
+          onPointerDown: (_) {
+            if (!widget.isLoading) setState(() => _btnPressed = true);
+          },
+          onPointerUp: (_) {
+            if (_btnPressed) setState(() => _btnPressed = false);
+          },
+          onPointerCancel: (_) {
+            if (_btnPressed) setState(() => _btnPressed = false);
+          },
+          child: AnimatedScale(
+            scale: _btnPressed ? 0.98 : 1.0,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryGreen.withValues(alpha: 0.28),
+                    offset: const Offset(0, 8),
+                    blurRadius: 18,
+                    spreadRadius: -4,
+                  ),
+                ],
+              ),
+              child: ElevatedButton(
+                onPressed: widget.isLoading ? null : widget.onRegister,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryGreen,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  disabledBackgroundColor:
+                      AppTheme.primaryGreen.withValues(alpha: 0.5),
+                ),
+                child: widget.isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.0,
+                        ),
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Register Account',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
         ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 12),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                height: 56,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.primaryGreen.withValues(alpha: 0.2),
-                      offset: const Offset(0, 4),
-                      blurRadius: 6,
-                      spreadRadius: -4,
+        const SizedBox(height: 22),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                AppRoutes.login,
+                (route) => false,
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Center(
+              child: RichText(
+                text: const TextSpan(
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    height: 1.4,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: 'Already have an account? ',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    BoxShadow(
-                      color: AppTheme.primaryGreen.withValues(alpha: 0.2),
-                      offset: const Offset(0, 10),
-                      blurRadius: 15,
-                      spreadRadius: -3,
+                    TextSpan(
+                      text: 'Log In',
+                      style: TextStyle(
+                        color: AppTheme.primaryGreen,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ],
                 ),
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : onRegister,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryGreen,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    disabledBackgroundColor: AppTheme.primaryGreen.withValues(
-                      alpha: 0.5,
-                    ),
-                  ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2.0,
-                          ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Register Account',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(width: 8),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ],
-                        ),
-                ),
               ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () {
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  } else {
-                    Navigator.of(context).pushNamedAndRemoveUntil(
-                      AppRoutes.login,
-                      (route) => false,
-                    );
-                  }
-                },
-                child: Center(
-                  child: RichText(
-                    text: const TextSpan(
-                      style: TextStyle(fontSize: 14),
-                      children: [
-                        TextSpan(
-                          text: 'Already have an account? ',
-                          style: TextStyle(color: Color(0xFF475569)),
-                        ),
-                        TextSpan(
-                          text: 'Log In',
-                          style: TextStyle(
-                            color: AppTheme.primaryGreen,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

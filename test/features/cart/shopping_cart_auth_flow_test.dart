@@ -115,7 +115,7 @@ void main() {
       await tester.tap(find.text('Log In'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Welcome Back!'), findsOneWidget);
+      expect(find.text('Welcome to PalengkeGo!'), findsOneWidget);
 
       Navigator.of(tester.element(find.byType(LoginScreen))).pop();
       await tester.pumpAndSettle();

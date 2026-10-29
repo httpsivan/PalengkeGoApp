@@ -1,5 +1,5 @@
-import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:palengkego/core/theme/app_theme.dart';
 
 /// Checkbox + Terms & Privacy Policy link for the registration form.
 class RegistrationTermsRow extends StatelessWidget {
@@ -75,7 +75,11 @@ class RegistrationTermsRow extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   'PalengkeGo is a digital public market platform dedicated to connecting Naga City People\'s Mall stallholders with local customers for fresh produce and market item deliveries.',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
                 SizedBox(height: 12),
                 Text(
@@ -89,7 +93,11 @@ class RegistrationTermsRow extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   'You agree to provide accurate and truthful information, including your full name, active mobile number, and valid Naga City delivery address to ensure seamless delivery fulfillment.',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
                 SizedBox(height: 12),
                 Text(
@@ -103,7 +111,11 @@ class RegistrationTermsRow extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   'Fresh market prices (fish, meat, vegetables, fruits) reflect daily market rates at the Naga City Public Market. Stallholders weigh items accurately upon preparing your order.',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
                 SizedBox(height: 12),
                 Text(
@@ -117,7 +129,11 @@ class RegistrationTermsRow extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   'In compliance with the Philippine Data Privacy Act of 2012, your personal data is collected solely for order delivery, account security, and customer service. Contact numbers and drop-off notes are shared only with assigned couriers and stallholders handling your orders.',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
                 SizedBox(height: 12),
                 Text(
@@ -131,7 +147,11 @@ class RegistrationTermsRow extends StatelessWidget {
                 SizedBox(height: 4),
                 Text(
                   'For inquiries or customer support, you may contact the Market Enterprise & Promotions Office (MEPO) or reach us directly through the PalengkeGo app Help & Support center.',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
               ],
             ),
@@ -171,20 +191,30 @@ class RegistrationTermsRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Checkbox(
-          value: accepted,
-          onChanged: (val) => onChanged(val ?? false),
-          activeColor: AppTheme.primaryGreen,
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: accepted,
+            onChanged: (val) => onChanged(val ?? false),
+            activeColor: AppTheme.primaryGreen,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+            side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
+          ),
         ),
+        const SizedBox(width: 10),
         Expanded(
           child: GestureDetector(
             onTap: () => _showTermsDialog(context),
             child: RichText(
               text: const TextSpan(
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: AppTheme.textSecondary,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF64748B),
+                  height: 1.35,
                 ),
                 children: [
                   TextSpan(text: 'By registering, you agree to our '),
@@ -192,7 +222,7 @@ class RegistrationTermsRow extends StatelessWidget {
                     text: 'Terms & Privacy Policy',
                     style: TextStyle(
                       color: AppTheme.primaryGreen,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       decoration: TextDecoration.underline,
                     ),
                   ),
