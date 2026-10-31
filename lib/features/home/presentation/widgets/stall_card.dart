@@ -1,6 +1,6 @@
 import 'package:palengkego/features/vendors/presentation/widgets/closing_soon_notice.dart';
 import 'package:palengkego/core/theme/app_theme.dart';
-import 'package:palengkego/core/infrastructure/supabase_service.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:palengkego/core/presentation/widgets/adaptive_image.dart';
@@ -30,10 +30,10 @@ class _StallCardState extends ConsumerState<StallCard> {
         ? null
         : findOperatingSchedule(schedules, widget.vendor.id);
     final now = ref.watch(closingClockProvider).value ?? DateTime.now();
-    final isLive = ref.watch(supabaseConfiguredProvider);
-    final isOpen = schedule == null
-        ? (!isLive && widget.vendor.isOpen)
-        : isScheduleOpenNow(schedule, now);
+
+    final isOpen = widget.vendor.isOpen &&
+        (schedule == null || isScheduleOpenNow(schedule, now));
+
     final status = isOpen ? 'OPEN' : 'CLOSED - PRE-ORDER';
 
     return GestureDetector(

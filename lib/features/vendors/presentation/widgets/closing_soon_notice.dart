@@ -8,7 +8,7 @@ import 'package:palengkego/features/vendors/domain/closing_time.dart';
 
 // One shared read for visible stalls, refreshed with the existing market signal.
 final marketSchedulesProvider =
-    FutureProvider.autoDispose<Map<String, List<DaySchedule>>>((ref) async {
+    FutureProvider<Map<String, List<DaySchedule>>>((ref) async {
       ref.watch(dataRefreshSignal);
       final client = ref.watch(supabaseClientProvider);
       if (client == null) {

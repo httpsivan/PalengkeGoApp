@@ -2,7 +2,7 @@ import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:palengkego/core/infrastructure/supabase_service.dart';
+
 import 'package:palengkego/features/market/domain/market_product.dart';
 import 'package:palengkego/features/vendors/application/vendor_provider.dart';
 import 'package:palengkego/features/vendors/domain/closing_time.dart';
@@ -29,13 +29,13 @@ class DiscountedItemCard extends ConsumerWidget {
         ? null
         : findOperatingSchedule(schedules, product.vendorId);
     final now = ref.watch(closingClockProvider).value ?? DateTime.now();
-    final isLive = ref.watch(supabaseConfiguredProvider);
+
     final vendor = vendorAsync.value;
 
-    final isOpen = schedule == null
-        ? (!isLive && (vendor?.isOpen ?? true))
-        : isScheduleOpenNow(schedule, now);
-    final isClosed = !isOpen || (vendor != null && !vendor.isOpen);
+    final vendorIsOpen = vendor?.isOpen ?? true;
+    final isOpen = vendorIsOpen &&
+        (schedule == null || isScheduleOpenNow(schedule, now));
+    final isClosed = !isOpen;
 
     return GestureDetector(
       onTap: onTap,

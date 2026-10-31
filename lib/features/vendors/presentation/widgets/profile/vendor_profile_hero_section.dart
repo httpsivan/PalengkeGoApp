@@ -2,7 +2,7 @@ import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:palengkego/core/presentation/widgets/adaptive_image.dart';
-import 'package:palengkego/core/infrastructure/supabase_service.dart';
+
 import 'package:palengkego/features/vendors/domain/vendor_profile.dart';
 import 'package:palengkego/features/vendors/domain/closing_time.dart';
 import 'package:palengkego/features/vendors/presentation/widgets/closing_soon_notice.dart';
@@ -44,12 +44,12 @@ class VendorProfileHeroSection extends ConsumerWidget {
     final schedule = schedules == null
         ? null
         : findOperatingSchedule(schedules, profile.id);
-    final isLive = ref.watch(supabaseConfiguredProvider);
-    // In live mode, never show a stale is_open flag when saved hours are
-    // missing or still loading. The schedule table is the availability source.
-    final isOpen = schedule == null
-        ? (!isLive && profile.isOpen)
-        : isScheduleOpenNow(schedule, now);
+
+
+
+    final isOpen = profile.isOpen &&
+        (schedule == null || isScheduleOpenNow(schedule, now));
+
     final minutesToClose = schedule == null
         ? null
         : minutesUntilClosing(schedule, now, isOpen: isOpen);
