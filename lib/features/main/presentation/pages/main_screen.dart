@@ -300,6 +300,7 @@ class _MainScreenState extends ConsumerState<MainScreen>
   }
 
   Future<void> _initializeAccountPush() async {
+    if (kIsWeb) return;
     final messaging = ref.read(firebaseMessagingProvider);
     if (messaging == null) return;
     try {
