@@ -5,6 +5,19 @@ All notable changes to the PalengkeGoAPP project will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [October 31, 2026] — Stall Closed Hours (Hybrid Option C) & Noticeable Liquid Glass UI Refinement
+
+### Added
+* **Stall Opening Hours & Next Opening Calculation (Hybrid Option C):** Implemented `findNextOpeningTime(schedule, now)` and `formatTime12Hour(timeStr)` in `lib/features/vendors/domain/closing_time.dart` to calculate whether a closed stall opens today, tomorrow, or on an upcoming day (e.g., "Friday at 6:00 AM") in Philippine Standard Time (UTC+8).
+* **Interactive Store Operating Hours Bottom Sheet (`StallOperatingHoursSheet`):** Added a dedicated modal bottom sheet (`lib/features/vendors/presentation/widgets/stall_operating_hours_sheet.dart`) displaying a pre-order fulfillment advisory, next opening status banner, and a comprehensive Monday-through-Sunday weekly schedule table with today's hours highlighted.
+* **Inline Opening Time on Stall Profiles:** Updated `VendorProfileHeroSection` to display `• Closed - Pre-order · Opens tomorrow at 6:00 AM  ℹ` with a direct tap target opening the weekly operating hours sheet.
+* **Inline Opening Time on Stall Cards:** Updated `StallCard` to display `PRE-ORDER · 6:00 AM` on the bottom card badge when closed with known schedule.
+* **Web Service Worker Endpoint:** Added `web/firebase-messaging-sw.js` and added a `kIsWeb` platform guard to `_initializeAccountPush()` in `MainScreen` to cleanly support Flutter Web development without MIME type warnings.
+
+### Changed & Refined
+* **Noticeable Liquid Glass Navigation Bar (`AppBottomNavBar` & `VendorDashboardBottomNav`):** Preserved and elevated the authentic Apple Liquid Glass aesthetic. Increased glass specular gradient contrast (`0.88`, `0.60`, `0.68`, `0.84`), added a crisp specular outer ring (`Colors.white.withValues(alpha: 0.95)`, width `1.3`), deepened ambient drop shadows (`blurRadius: 26`, spread `1`, offset `(0, 8)` with `0.22` alpha), and set inactive tab text/icons to high-contrast Slate-800 (`Color(0xFF1E293B)`) for sharp visibility without losing the translucent backdrop blur.
+* **Noticeable Liquid Glass Top Header Action Buttons (`_LiquidGlassCircleButton`):** Preserved the circular liquid glass styling (`ClipOval` with `BackdropFilter` at `sigma: 20`) for the Back (`<`), Favorite (`♡`), and More Menu (`⋮`) buttons in `VendorProfileScreen`. Enhanced them with a multi-stop specular glass gradient (`0.88`, `0.55`, `0.72`), a 1.5px bright specular rim, dual ambient drop shadows (`0.28` alpha blur 14 + contact shadow), and 20–21px high-contrast emerald icons, ensuring prominent visibility over both dark cover banners and scrolled white lists without flattening to solid white.
+
 ## [September 13, 2026] — Security Hardening: Storage Lock-Down & Backend Convergence
 
 ### Fixed
