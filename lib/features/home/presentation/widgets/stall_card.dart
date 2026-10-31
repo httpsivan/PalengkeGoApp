@@ -34,7 +34,15 @@ class _StallCardState extends ConsumerState<StallCard> {
     final isOpen = widget.vendor.isOpen &&
         (schedule == null || isScheduleOpenNow(schedule, now));
 
-    final status = isOpen ? 'OPEN' : 'CLOSED - PRE-ORDER';
+    final nextOpening = (!isOpen && schedule != null)
+        ? findNextOpeningTime(schedule, now)
+        : null;
+
+    final status = isOpen
+        ? 'OPEN'
+        : (nextOpening != null
+            ? 'PRE-ORDER · ${nextOpening.formattedTime}'
+            : 'CLOSED - PRE-ORDER');
 
     return GestureDetector(
       onTap: () {

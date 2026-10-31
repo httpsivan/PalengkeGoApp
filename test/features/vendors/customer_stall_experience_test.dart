@@ -148,4 +148,52 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  test('formatTime12Hour formats correctly to AM/PM', () {
+    expect(formatTime12Hour('06:00'), '6:00 AM');
+    expect(formatTime12Hour('06:30:00'), '6:30 AM');
+    expect(formatTime12Hour('12:00'), '12:00 PM');
+    expect(formatTime12Hour('13:45'), '1:45 PM');
+    expect(formatTime12Hour('00:15'), '12:15 AM');
+  });
+
+  test('findNextOpeningTime finds today, tomorrow, or future day', () {
+    const weeklySchedule = [
+      DaySchedule(name: 'Monday', openTime: '06:00', closeTime: '18:00'),
+      DaySchedule(name: 'Tuesday', openTime: '07:30', closeTime: '17:00'),
+      DaySchedule(name: 'Friday', openTime: '05:00', closeTime: '12:00'),
+    ];
+
+    // Monday 04:00 PH time -> opens today at 6:00 AM
+    final earlyMonday = DateTime.parse('2026-09-27T20:00:00Z');
+    final nextToday = findNextOpeningTime(weeklySchedule, earlyMonday);
+    expect(nextToday, isNotNull);
+    expect(nextToday!.isToday, isTrue);
+    expect(nextToday.formattedTime, '6:00 AM');
+    expect(nextToday.fullText, 'Opens today at 6:00 AM');
+    expect(nextToday.shortText, 'Opens 6:00 AM');
+
+    // Monday 19:00 PH time -> opens tomorrow (Tuesday) at 7:30 AM
+    final mondayEvening = DateTime.parse('2026-09-28T11:00:00Z');
+    final nextTomorrow = findNextOpeningTime(weeklySchedule, mondayEvening);
+    expect(nextTomorrow, isNotNull);
+    expect(nextTomorrow!.isTomorrow, isTrue);
+    expect(nextTomorrow.formattedTime, '7:30 AM');
+    expect(nextTomorrow.fullText, 'Opens tomorrow at 7:30 AM');
+
+    // Tuesday 20:00 PH time -> closed Wed & Thu, opens Friday at 5:00 AM
+    final tuesdayEvening = DateTime.parse('2026-09-29T12:00:00Z');
+    final nextFuture = findNextOpeningTime(weeklySchedule, tuesdayEvening);
+    expect(nextFuture, isNotNull);
+    expect(nextFuture!.dayLabel, 'Friday');
+    expect(nextFuture.formattedTime, '5:00 AM');
+    expect(nextFuture.fullText, 'Opens Friday at 5:00 AM');
+
+    // All closed schedule
+    const allClosed = [
+      DaySchedule(name: 'Monday', isOpen: false),
+    ];
+    expect(findNextOpeningTime(allClosed, mondayEvening), isNull);
+    expect(findNextOpeningTime([], mondayEvening), isNull);
+    expect(findNextOpeningTime(null, mondayEvening), isNull);
+  });
 }

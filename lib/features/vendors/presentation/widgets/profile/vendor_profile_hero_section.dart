@@ -6,6 +6,7 @@ import 'package:palengkego/core/presentation/widgets/adaptive_image.dart';
 import 'package:palengkego/features/vendors/domain/vendor_profile.dart';
 import 'package:palengkego/features/vendors/domain/closing_time.dart';
 import 'package:palengkego/features/vendors/presentation/widgets/closing_soon_notice.dart';
+import 'package:palengkego/features/vendors/presentation/widgets/stall_operating_hours_sheet.dart';
 
 class VendorProfileHeroSection extends ConsumerWidget {
   final VendorProfile profile;
@@ -53,6 +54,10 @@ class VendorProfileHeroSection extends ConsumerWidget {
     final minutesToClose = schedule == null
         ? null
         : minutesUntilClosing(schedule, now, isOpen: isOpen);
+
+    final nextOpening = (!isOpen && schedule != null)
+        ? findNextOpeningTime(schedule, now)
+        : null;
 
     const coverHeight = 220.0;
     const cardTop = 180.0;
@@ -169,47 +174,73 @@ class VendorProfileHeroSection extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    height: 26,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: isOpen
-                          ? const Color(0xFFDCFCE7)
-                          : const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: schedule != null && schedule.isNotEmpty
+                        ? () => StallOperatingHoursSheet.show(
+                              context,
+                              stallName: profile.name,
+                              schedule: schedule,
+                              isCurrentlyOpen: isOpen,
+                              nextOpening: nextOpening,
+                            )
+                        : null,
+                    child: Container(
+                      height: 26,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
                         color: isOpen
-                            ? const Color.fromRGBO(22, 163, 74, 0.25)
-                            : const Color.fromRGBO(217, 119, 6, 0.3),
+                            ? const Color(0xFFDCFCE7)
+                            : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: isOpen
+                              ? const Color.fromRGBO(22, 163, 74, 0.25)
+                              : const Color.fromRGBO(217, 119, 6, 0.3),
+                        ),
                       ),
-                    ),
-                    alignment: Alignment.center,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isOpen
-                                ? const Color(0xFF166534)
-                                : AppTheme.statusPreOrder,
+                      alignment: Alignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isOpen
+                                  ? const Color(0xFF166534)
+                                  : AppTheme.statusPreOrder,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          isOpen ? 'Open Now' : 'Closed - Pre-order',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isOpen
-                                ? const Color(0xFF166534)
-                                : const Color(0xFFB45309),
-                            height: 1.1,
+                          const SizedBox(width: 5),
+                          Text(
+                            isOpen
+                                ? 'Open Now'
+                                : (nextOpening != null
+                                    ? 'Closed - Pre-order · ${nextOpening.fullText}'
+                                    : 'Closed - Pre-order'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isOpen
+                                  ? const Color(0xFF166534)
+                                  : const Color(0xFFB45309),
+                              height: 1.1,
+                            ),
                           ),
-                        ),
-                      ],
+                          if (schedule != null && schedule.isNotEmpty) ...[
+                            const SizedBox(width: 5),
+                            Icon(
+                              Icons.info_outline_rounded,
+                              size: 13,
+                              color: isOpen
+                                  ? const Color(0xFF166534)
+                                  : const Color(0xFFB45309),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                   if (minutesToClose != null) ...[
