@@ -41,6 +41,8 @@ class KycRejectionDialog extends StatelessWidget {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
       title: Row(
         children: [
           Container(
@@ -125,37 +127,61 @@ class KycRejectionDialog extends StatelessWidget {
           ),
         ],
       ),
+      // Stacked full-width action buttons so both primary ("Resubmit Documents")
+      // and secondary ("Dismiss") actions are immediately noticeable and clickable.
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
-            'Dismiss',
-            style: TextStyle(color: AppTheme.textSecondary),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.of(context).pop();
+              if (onResubmit != null) {
+                onResubmit!();
+              } else {
+                Navigator.of(context).push(
+                  PageTransitions.slideFromRight(
+                    const VendorOnboardingScreen(),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text(
+              'Resubmit Documents',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryGreen,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ),
-        ElevatedButton.icon(
-          onPressed: () {
-            Navigator.of(context).pop();
-            if (onResubmit != null) {
-              onResubmit!();
-            } else {
-              Navigator.of(context).push(
-                PageTransitions.slideFromRight(
-                  const VendorOnboardingScreen(),
-                ),
-              );
-            }
-          },
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text(
-            'Resubmit Documents',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.primaryGreen,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: const Color(0xFFF8FAFC),
+              foregroundColor: const Color(0xFF334155),
+              side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Dismiss',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF334155),
+              ),
             ),
           ),
         ),

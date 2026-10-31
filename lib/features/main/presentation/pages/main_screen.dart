@@ -719,47 +719,71 @@ class _MainScreenState extends ConsumerState<MainScreen>
               'Congratulations! Your application has been approved by MEPO. Your stall is now active and ready for business.',
               style: TextStyle(fontSize: 14, color: Color(0xFF475569)),
             ),
+            actionsAlignment: MainAxisAlignment.center,
+            actionsPadding: const EdgeInsets.fromLTRB(24, 4, 24, 20),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: const Text(
-                  'Dismiss',
-                  style: TextStyle(color: AppTheme.textSecondary),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.of(dialogCtx).pop(); // Dismiss dialog
-                  final entered = await ref
-                      .read(authProvider.notifier)
-                      .enterVendorMode();
-                  if (!entered) {
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(dialogCtx).pop(); // Dismiss dialog
+                    final entered = await ref
+                        .read(authProvider.notifier)
+                        .enterVendorMode();
+                    if (!entered) {
+                      if (context.mounted) {
+                        AppServices.showError(
+                          'Only stall holders can manage a stall.',
+                        );
+                      }
+                      return;
+                    }
                     if (context.mounted) {
-                      AppServices.showError(
-                        'Only stall holders can manage a stall.',
+                      Navigator.of(context).pushAndRemoveUntil(
+                        PageTransitions.slideFromRight(
+                          const VendorDashboardScreen(),
+                        ),
+                        (route) => false,
                       );
                     }
-                    return;
-                  }
-                  if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      PageTransitions.slideFromRight(
-                        const VendorDashboardScreen(),
-                      ),
-                      (route) => false,
-                    );
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGreen,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Manage Stall',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
                 ),
-                child: const Text(
-                  'Manage Stall',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF8FAFC),
+                    foregroundColor: const Color(0xFF334155),
+                    side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Dismiss',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
                 ),
               ),
             ],
