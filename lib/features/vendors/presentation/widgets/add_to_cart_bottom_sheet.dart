@@ -948,6 +948,7 @@ class _AddToCartBottomSheetState extends ConsumerState<AddToCartBottomSheet> {
         actions: [
           SizedBox(
             width: double.infinity,
+            height: 46,
             child: ElevatedButton(
               onPressed: () => Navigator.pop(dialogCtx, true),
               style: ElevatedButton.styleFrom(
@@ -958,14 +959,34 @@ class _AddToCartBottomSheetState extends ConsumerState<AddToCartBottomSheet> {
                 ),
                 elevation: 0,
               ),
-              child: const Text('Log In / Sign Up'),
+              child: const Text(
+                'Log In / Sign Up',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              style: OutlinedButton.styleFrom(
+                backgroundColor: const Color(0xFFF8FAFC),
+                foregroundColor: const Color(0xFF334155),
+                side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF334155),
+                ),
+              ),
             ),
           ),
         ],
