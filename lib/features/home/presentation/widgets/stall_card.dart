@@ -34,7 +34,7 @@ class _StallCardState extends ConsumerState<StallCard> {
     final isOpen = schedule == null
         ? (!isLive && widget.vendor.isOpen)
         : isScheduleOpenNow(schedule, now);
-    final status = isOpen ? 'OPEN' : 'CLOSED';
+    final status = isOpen ? 'OPEN' : 'CLOSED - PRE-ORDER';
 
     return GestureDetector(
       onTap: () {
@@ -143,19 +143,33 @@ class _StallCardState extends ConsumerState<StallCard> {
                     bottom: 8,
                     child: Container(
                       height: 23,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isOpen ? 10 : 8,
+                      ),
                       decoration: BoxDecoration(
-                        color: isOpen ? AppTheme.statusOpen : AppTheme.muted,
+                        color: isOpen
+                            ? AppTheme.statusOpen
+                            : AppTheme.statusPreOrder,
                         borderRadius: BorderRadius.circular(999),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isOpen
+                                    ? AppTheme.statusOpen
+                                    : AppTheme.statusPreOrder)
+                                .withValues(alpha: 0.35),
+                            offset: const Offset(0, 1.5),
+                            blurRadius: 3,
+                          ),
+                        ],
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         status,
-                        style: const TextStyle(
-                          fontSize: 10,
+                        style: TextStyle(
+                          fontSize: isOpen ? 10 : 9.5,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
-                          letterSpacing: 0.25,
+                          letterSpacing: isOpen ? 0.25 : 0.2,
                         ),
                       ),
                     ),

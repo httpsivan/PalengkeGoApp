@@ -30,17 +30,6 @@ class VendorProfileProductCard extends ConsumerWidget {
   ) async {
     if (product.stockQuantity <= 0) return;
 
-    if (!isStallOpen) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$vendorName is currently closed.'),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
     final result = await AddToCartBottomSheet.show(
       context,
       vendorName: vendorName,
@@ -86,7 +75,7 @@ class VendorProfileProductCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final price = product.price.toInt();
     final isAvailable = product.stockQuantity > 0;
-    final canAddToCart = isAvailable && isStallOpen;
+    final canAddToCart = isAvailable;
 
     return Material(
       color: Colors.white,

@@ -38,27 +38,7 @@ class DiscountedItemCard extends ConsumerWidget {
     final isClosed = !isOpen || (vendor != null && !vendor.isOpen);
 
     return GestureDetector(
-      onTap: () {
-        if (isClosed) {
-          final stallName = (vendor != null && vendor.name.trim().isNotEmpty)
-              ? vendor.name
-              : 'This stall';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '$stallName is currently closed.',
-              ),
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: const Color(0xFF374151),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          );
-          return;
-        }
-        onTap();
-      },
+      onTap: onTap,
       child: Container(
         width: 160,
         // Fixed height prevents overflow across all device sizes.
@@ -149,11 +129,11 @@ class DiscountedItemCard extends ConsumerWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFDC2626),
+                          color: AppTheme.statusClosed,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
-                          'CLOSED',
+                          'PRE-ORDER',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 9,
