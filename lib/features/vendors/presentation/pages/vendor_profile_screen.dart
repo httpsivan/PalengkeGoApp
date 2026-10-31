@@ -1,4 +1,3 @@
-import 'dart:ui' show ImageFilter;
 import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/core/widgets/async_view.dart';
 import 'package:flutter/material.dart';
@@ -324,7 +323,7 @@ class _VendorProfileScreenState extends ConsumerState<VendorProfileScreen> {
                         onTap: () => Navigator.pop(context),
                         child: const Icon(
                           Icons.arrow_back_ios_new_rounded,
-                          size: 18,
+                          size: 20,
                           color: AppTheme.primaryGreen,
                         ),
                       ),
@@ -347,7 +346,7 @@ class _VendorProfileScreenState extends ConsumerState<VendorProfileScreen> {
                               isFavorite
                                   ? Icons.favorite_rounded
                                   : Icons.favorite_outline_rounded,
-                              size: 18,
+                              size: 21,
                               color: isFavorite
                                   ? const Color(0xFFEF4444)
                                   : AppTheme.primaryGreen,
@@ -440,7 +439,7 @@ class _VendorProfileScreenState extends ConsumerState<VendorProfileScreen> {
                             child: const _LiquidGlassCircleButton(
                               child: Icon(
                                 Icons.more_vert_rounded,
-                                size: 18,
+                                size: 21,
                                 color: AppTheme.primaryGreen,
                               ),
                             ),
@@ -470,8 +469,9 @@ class _VendorProfileScreenState extends ConsumerState<VendorProfileScreen> {
   }
 }
 
-/// Frosted "liquid glass" circular button used over the stall cover photo:
-/// blurred backdrop, translucent white fill, bright rim and soft shadow.
+/// Elevated circular action button used over the stall cover photo and header:
+/// solid crisp white background, clear border, elevated drop shadow,
+/// and responsive touch feedback.
 class _LiquidGlassCircleButton extends StatelessWidget {
   const _LiquidGlassCircleButton({required this.child, this.onTap});
 
@@ -480,45 +480,38 @@ class _LiquidGlassCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: 1.2,
         ),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.55),
-                    Colors.white.withValues(alpha: 0.25),
-                  ],
-                ),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.65),
-                  width: 1,
-                ),
-              ),
-              child: child,
-            ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 10,
+            spreadRadius: 0,
+            offset: Offset(0, 3),
           ),
+          BoxShadow(
+            color: Color(0x0F000000),
+            blurRadius: 4,
+            spreadRadius: 0,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Center(child: child),
         ),
       ),
     );

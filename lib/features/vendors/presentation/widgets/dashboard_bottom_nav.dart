@@ -37,15 +37,15 @@ class VendorDashboardBottomNav extends ConsumerWidget {
               const Color(0xFF334155).withValues(alpha: 0.70),
             ]
           : [
-              Colors.white.withValues(alpha: 0.75),
-              Colors.white.withValues(alpha: 0.44),
-              Colors.white.withValues(alpha: 0.54),
-              Colors.white.withValues(alpha: 0.72),
+              Colors.white,
+              const Color(0xFFFBFDFD),
+              const Color(0xFFF8FAFC),
+              Colors.white,
             ],
     );
     final outerRing = isDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.85);
+        ? const Color(0xFF334155)
+        : const Color(0xFFCBD5E1);
 
     // Lush Emerald Gradient for the sliding active indicator
     final activeGradient = LinearGradient(
@@ -64,7 +64,7 @@ class VendorDashboardBottomNav extends ConsumerWidget {
 
     // High contrast inactive text/icon color over liquid glass
     final inactiveColor =
-        isDark ? const Color(0xFFCBD5E1) : const Color(0xFF33413D);
+        isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569);
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final compact = screenWidth < 360;
@@ -102,16 +102,20 @@ class VendorDashboardBottomNav extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(32),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0F172A).withValues(alpha: 0.14),
-                    blurRadius: 24,
-                    spreadRadius: 0,
-                    offset: const Offset(0, 8),
+                    color: isDark
+                        ? const Color(0xFF000000).withValues(alpha: 0.45)
+                        : const Color(0xFF0B372B).withValues(alpha: 0.15),
+                    blurRadius: 22,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 6),
                   ),
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: isDark ? 0.05 : 0.45),
-                    blurRadius: 6,
-                    spreadRadius: -1,
-                    offset: const Offset(0, -1),
+                    color: isDark
+                        ? const Color(0xFF000000).withValues(alpha: 0.25)
+                        : const Color(0xFF0F172A).withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
