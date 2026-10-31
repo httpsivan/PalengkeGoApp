@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:palengkego/core/theme/app_theme.dart';
 import 'package:palengkego/core/widgets/async_view.dart';
 import 'package:flutter/material.dart';
@@ -469,9 +470,9 @@ class _VendorProfileScreenState extends ConsumerState<VendorProfileScreen> {
   }
 }
 
-/// Elevated circular action button used over the stall cover photo and header:
-/// solid crisp white background, clear border, elevated drop shadow,
-/// and responsive touch feedback.
+/// Circular action button with authentic iPhone liquid glass styling:
+/// real-time backdrop blur, translucent specular glass gradient,
+/// crisp high-visibility glass rim, and deep ambient drop shadow.
 class _LiquidGlassCircleButton extends StatelessWidget {
   const _LiquidGlassCircleButton({required this.child, this.onTap});
 
@@ -484,34 +485,54 @@ class _LiquidGlassCircleButton extends StatelessWidget {
       width: 42,
       height: 42,
       decoration: BoxDecoration(
-        color: Colors.white,
         shape: BoxShape.circle,
-        border: Border.all(
-          color: const Color(0xFFE2E8F0),
-          width: 1.2,
-        ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 14,
             spreadRadius: 0,
-            offset: Offset(0, 3),
+            offset: const Offset(0, 4),
           ),
           BoxShadow(
-            color: Color(0x0F000000),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 4,
-            spreadRadius: 0,
-            offset: Offset(0, 1),
+            spreadRadius: 0.5,
+            offset: const Offset(0, 1),
           ),
         ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Center(child: child),
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.45, 1.0],
+                colors: [
+                  Colors.white.withValues(alpha: 0.88),
+                  Colors.white.withValues(alpha: 0.55),
+                  Colors.white.withValues(alpha: 0.72),
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.95),
+                width: 1.5,
+              ),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onTap,
+                child: Center(child: child),
+              ),
+            ),
+          ),
         ),
       ),
     );
